@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import * as controller from '../controllers/emergency.controller';
+import { emergencyContacts } from '../controllers/emergency.controller';
 
 const router = Router();
-router.get('/', controller.placeholder);
+router.get('/', emergencyContacts);
+
 export default router;

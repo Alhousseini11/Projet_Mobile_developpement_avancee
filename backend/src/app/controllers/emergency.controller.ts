@@ -1,3 +1,9 @@
 import { Request, Response } from 'express';
 
-export const placeholder = async (_req: Request, res: Response) => res.status(501).json({ message: 'emergency controller not implemented' });
+export const emergencyContacts = async (_req: Request, res: Response) => {
+  res.json({
+    hotline: '+1-800-EMERGENCY',
+    towService: '+1-800-TOW-TRUCK',
+    message: 'Contacts statiques à personnaliser',
+  });
+};

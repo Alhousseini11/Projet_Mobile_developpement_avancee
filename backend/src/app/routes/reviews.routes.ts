@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import * as controller from '../controllers/reviews.controller';
+import { listReviews } from '../controllers/reviews.controller';
 
 const router = Router();
-router.get('/', controller.placeholder);
+router.get('/', listReviews);
+
 export default router;

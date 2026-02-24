@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import * as controller from '../controllers/location.controller';
+import { listLocations } from '../controllers/location.controller';
 
 const router = Router();
-router.get('/', controller.placeholder);
+router.get('/', listLocations);
+
 export default router;
