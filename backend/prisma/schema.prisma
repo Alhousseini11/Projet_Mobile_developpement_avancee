@@ -1,0 +1,194 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  MECHANIC
+  ADMIN
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  PAID
+  CANCELLED
+  COMPLETED
+}
+
+enum NotificationType {
+  APPOINTMENT
+  PROMO
+  MAINTENANCE
+  SYSTEM
+}
+
+enum Severity {
+  INFO
+  WARN
+  CRITICAL
+}
+
+enum TutorialDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model User {
+  id                   String          @id @default(cuid())
+  email                String          @unique
+  passwordHash         String
+  fullName             String
+  phone                String?
+  role                 Role            @default(USER)
+  photoUrl             String?
+  vehicles             Vehicle[]
+  reservations         Reservation[]
+  assignedReservations Reservation[]   @relation("MechanicReservations")
+  reviews              Review[]
+  favorites            Favorite[]
+  quotes               Quote[]
+  payments             PaymentMethod[]
+  notifications        Notification[]
+  messagesSent         ChatMessage[]   @relation("MessagesSent")
+  messagesReceived     ChatMessage[]   @relation("MessagesReceived")
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+}
+
+model Vehicle {
+  id        String     @id @default(cuid())
+  userId    String
+  brand     String
+  model     String
+  year      Int
+  mileage   Int?
+  reminders Reminder[]
+  user      User       @relation(fields: [userId], references: [id])
+}
+
+model Reservation {
+  id          String             @id @default(cuid())
+  userId      String
+  mechanicId  String?
+  serviceType String
+  description String?
+  status      ReservationStatus  @default(PENDING)
+  scheduledAt DateTime
+  photos      ReservationPhoto[]
+  paymentId   String?
+  amount      Decimal            @db.Decimal(10, 2)
+  currency    String             @default("USD")
+  locationId  String?
+  reviews     Review[]
+  user        User               @relation(fields: [userId], references: [id])
+  mechanic    User?              @relation("MechanicReservations", fields: [mechanicId], references: [id])
+  location    Location?          @relation(fields: [locationId], references: [id])
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model ReservationPhoto {
+  id            String      @id @default(cuid())
+  reservationId String
+  url           String
+  reservation   Reservation @relation(fields: [reservationId], references: [id])
+}
+
+model Tutorial {
+  id          String             @id @default(cuid())
+  title       String
+  category    String
+  difficulty  TutorialDifficulty
+  videoUrl    String
+  thumbnail   String?
+  durationSec Int?
+  favorites   Favorite[]
+  createdAt   DateTime           @default(now())
+}
+
+model Favorite {
+  userId     String
+  tutorialId String
+  user       User     @relation(fields: [userId], references: [id])
+  tutorial   Tutorial @relation(fields: [tutorialId], references: [id])
+
+  @@id([userId, tutorialId])
+}
+
+model Review {
+  id            String      @id @default(cuid())
+  userId        String
+  reservationId String
+  rating        Int
+  comment       String?
+  user          User        @relation(fields: [userId], references: [id])
+  reservation   Reservation @relation(fields: [reservationId], references: [id])
+  createdAt     DateTime    @default(now())
+}
+
+model Notification {
+  id     String           @id @default(cuid())
+  userId String
+  type   NotificationType
+  title  String
+  body   String
+  read   Boolean          @default(false)
+  sentAt DateTime         @default(now())
+  user   User             @relation(fields: [userId], references: [id])
+}
+
+model Location {
+  id           String        @id @default(cuid())
+  address      String
+  lat          Float
+  lng          Float
+  routeUrl     String?
+  reservations Reservation[]
+}
+
+model PaymentMethod {
+  id        String  @id @default(cuid())
+  userId    String
+  stripeRef String
+  brand     String?
+  last4     String?
+  expMonth  Int?
+  expYear   Int?
+  user      User    @relation(fields: [userId], references: [id])
+}
+
+model Quote {
+  id          String   @id @default(cuid())
+  userId      String
+  serviceType String
+  estimated   Decimal  @db.Decimal(10, 2)
+  currency    String   @default("USD")
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  body       String?
+  imageUrl   String?
+  sentAt     DateTime @default(now())
+  sender     User     @relation("MessagesSent", fields: [senderId], references: [id])
+  receiver   User     @relation("MessagesReceived", fields: [receiverId], references: [id])
+}
+
+model Reminder {
+  id        String   @id @default(cuid())
+  vehicleId String
+  title     String
+  dueAt     DateTime
+  severity  Severity @default(INFO)
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id])
+}

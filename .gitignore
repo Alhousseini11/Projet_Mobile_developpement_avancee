@@ -26,3 +26,11 @@ typings/
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Backend / Node
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/.env.*
+backend/prisma/dev.db
+backend/prisma/dev.db-journal

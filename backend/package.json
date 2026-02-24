@@ -1,0 +1,32 @@
+{
+  "name": "garage-mechanic-backend",
+  "version": "0.0.1",
+  "main": "dist/index.js",
+  "license": "MIT",
+  "scripts": {
+    "dev": "ts-node-dev src/app/server.ts",
+    "build": "tsc -p .",
+    "start": "node dist/app/server.js",
+    "lint": "eslint .",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "7.4.1",
+    "aws-sdk": "^2.1491.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pino": "^9.0.0",
+    "socket.io": "^4.7.5",
+    "stripe": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.2",
+    "eslint": "^8.57.0",
+    "prisma": "7.4.1"
+  }
+}
