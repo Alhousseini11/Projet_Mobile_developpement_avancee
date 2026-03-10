@@ -177,7 +177,8 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'nativescript-vue'
+import { ref, onMounted } from 'nativescript-vue'
+import VehicleService from '../services/VehicleService'
 
 interface Vehicle {
   id?: string
@@ -188,36 +189,31 @@ interface Vehicle {
   type: 'sedan' | 'suv' | 'truck' | 'other'
   licensePlate?: string
   fuelType?: string
+  createdAt?: Date
+  updatedAt?: Date
 }
 
-const vehicles = ref<Vehicle[]>([
-  {
-    id: '1',
-    name: 'Toyota Corolla',
-    model: 'Corolla 2018',
-    year: 2018,
-    mileage: 75000,
-    type: 'sedan',
-    licensePlate: 'AB-123-CD',
-    fuelType: 'Essence'
-  },
-  {
-    id: '2',
-    name: 'Renault Clio',
-    model: 'Clio 2020',
-    year: 2020,
-    mileage: 45000,
-    type: 'sedan',
-    licensePlate: 'EF-456-GH',
-    fuelType: 'Diesel'
-  }
-])
-
+const vehicles = ref<Vehicle[]>([])
 const selectedVehicle = ref<Vehicle | null>(null)
 const showVehicleDialog = ref(false)
+const isLoading = ref(false)
 
-const onPageLoaded = () => {
+const onPageLoaded = async () => {
   console.log('Vehicles page loaded')
+  await loadVehicles()
+}
+
+const loadVehicles = async () => {
+  try {
+    isLoading.value = true
+    const data = await VehicleService.getVehicles()
+    vehicles.value = data
+    console.log('Vehicles loaded:', vehicles.value.length)
+  } catch (error) {
+    console.error('Error loading vehicles:', error)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 const getBorderColorClass = (type: string): string => {
@@ -254,16 +250,24 @@ const viewVehicleDetails = () => {
   }
 }
 
-const deleteVehicle = () => {
-  if (selectedVehicle.value) {
-    console.log('Delete vehicle:', selectedVehicle.value.id)
-    const index = vehicles.value.findIndex(
-      (v: Vehicle) => v.id === selectedVehicle.value?.id
-    )
-    if (index > -1) {
-      vehicles.value.splice(index, 1)
+const deleteVehicle = async () => {
+  if (selectedVehicle.value?.id) {
+    try {
+      console.log('Delete vehicle:', selectedVehicle.value.id)
+      await VehicleService.deleteVehicle(selectedVehicle.value.id)
+      
+      // Update local state
+      const index = vehicles.value.findIndex(
+        (v: Vehicle) => v.id === selectedVehicle.value?.id
+      )
+      if (index > -1) {
+        vehicles.value.splice(index, 1)
+      }
+      showVehicleDialog.value = false
+      selectedVehicle.value = null
+    } catch (error) {
+      console.error('Error deleting vehicle:', error)
     }
-    showVehicleDialog.value = false
   }
 }
 

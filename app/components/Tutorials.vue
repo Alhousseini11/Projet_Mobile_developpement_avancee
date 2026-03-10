@@ -307,7 +307,7 @@
               <Label
                 v-for="(instruction, idx) in selectedTutorial.instructions"
                 :key="idx"
-                :text="`${idx + 1}. ${instruction}`"
+                :text="`${(idx as number) + 1}. ${instruction}`"
                 class="text-gray-300 text-xs mb-1"
                 text-wrap="true"
               />
@@ -519,11 +519,11 @@ const goBack = () => {
   opacity: 0.5;
 }
 
-.w-11/12 {
+.w-11-12 {
   width: 91.666667%;
 }
 
-.max-h-3/4 {
+.max-h-3-4 {
   max-height: 75%;
 }
 

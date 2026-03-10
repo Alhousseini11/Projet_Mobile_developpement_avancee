@@ -24,6 +24,15 @@ export const COMPONENTS_INDEX: ComponentReference[] = [
     linesOfCode: 200
   },
   {
+    name: 'Reservations',
+    path: 'app/components/Reservations.vue',
+    type: 'component',
+    imports: [],
+    exports: ['Reservations'],
+    description: 'Page de réservation complète avec 8 étapes (service, date, véhicule, contact, paiement, récapitulatif, confirmation)',
+    linesOfCode: 800
+  },
+  {
     name: 'Vehicles',
     path: 'app/components/Vehicles.vue',
     type: 'component',

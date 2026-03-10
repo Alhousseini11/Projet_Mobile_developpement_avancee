@@ -3,8 +3,13 @@
   "main": "app/app.ts",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "android": "ns run android",
+    "ios": "ns run ios"
+  },
   "dependencies": {
     "@nativescript/core": "~9.0.0",
+    "axios": "^1.13.6",
     "nativescript-vue": "^3.0.0"
   },
   "devDependencies": {
@@ -12,7 +17,7 @@
     "@nativescript/tailwind": "^4.0.0",
     "@nativescript/types": "~9.0.0",
     "@nativescript/webpack": "~5.0.31",
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.35",
     "tailwindcss": "^4.0.0",
     "typescript": "~5.4.0"
   }

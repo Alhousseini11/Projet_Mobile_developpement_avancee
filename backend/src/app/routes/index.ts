@@ -1,6 +1,7 @@
 import { Express } from 'express';
 import authRoutes from './auth.routes';
 import reservationsRoutes from './reservations.routes';
+import paymentsRoutes from './payments.routes';
 import tutorialsRoutes from './tutorials.routes';
 import vehiclesRoutes from './vehicles.routes';
 import profileRoutes from './profile.routes';
@@ -15,6 +16,7 @@ import homeRoutes from './home.routes';
 export function registerRoutes(app: Express) {
   app.use('/api/auth', authRoutes);
   app.use('/api/reservations', reservationsRoutes);
+  app.use('/api/payments', paymentsRoutes);
   app.use('/api/tutorials', tutorialsRoutes);
   app.use('/api/vehicles', vehiclesRoutes);
   app.use('/api/profile', profileRoutes);

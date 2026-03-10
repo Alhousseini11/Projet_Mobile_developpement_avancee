@@ -235,8 +235,10 @@
   </Page>
 </template>
 
-<script lang="ts">
-interface VehicleType {
+<script lang="ts" setup>
+import { ref } from 'nativescript-vue'
+
+interface Vehicle {
   id?: string
   name: string
   model: string
@@ -247,78 +249,74 @@ interface VehicleType {
   fuelType?: string
 }
 
-interface VehicleDetailsData {
-  vehicle: VehicleType
+const vehicle = ref<Vehicle>({
+  id: '1',
+  name: 'Toyota Corolla',
+  model: 'Corolla 2018',
+  year: 2018,
+  mileage: 75000,
+  type: 'sedan',
+  licensePlate: 'AB-123-CD',
+  fuelType: 'Essence'
+})
+
+const onPageLoaded = () => {
+  // Load vehicle details from navigation context
+  // if (this.$route.params?.vehicleId) {
+  //   this.loadVehicleData(this.$route.params.vehicleId)
+  // }
 }
 
-export default {
-  name: 'VehicleDetails',
-  data(): VehicleDetailsData {
-    return {
-      vehicle: {
-        id: '1',
-        name: 'Toyota Corolla',
-        model: 'Corolla 2018',
-        year: 2018,
-        mileage: 75000,
-        type: 'sedan',
-        licensePlate: 'AB-123-CD',
-        fuelType: 'Essence'
-      }
-    }
-  },
-  methods: {
-    onPageLoaded(this: VehicleDetailsData & any): void {
-      // Load vehicle details from navigation context
-      // if (this.$route.params?.vehicleId) {
-      //   this.loadVehicleData(this.$route.params.vehicleId)
-      // }
-    },
-    getVehicleTypeLabel(this: VehicleDetailsData & any, type: string): string {
-      const typeMap: { [key: string]: string } = {
-        sedan: '🚗 Berline',
-        suv: '🏎️ SUV',
-        truck: '🚚 Camion',
-        other: '🚙 Autre'
-      }
-      return typeMap[type] || 'Type inconnu'
-    },
-    editVehicle(this: VehicleDetailsData & any): void {
-      console.log('Edit vehicle:', this.vehicle.id)
-      // this.$navigator.navigate({
-      //   moduleName: 'components/AddVehicle',
-      //   context: { vehicleId: this.vehicle.id }
-      // })
-    },
-    deleteVehicle(this: VehicleDetailsData & any): void {
-      console.log('Delete vehicle:', this.vehicle.id)
-      // Show confirmation dialog
-      // Then call backend to delete
-    },
-    viewMaintenanceHistory(this: VehicleDetailsData & any): void {
-      console.log('View maintenance history for:', this.vehicle.id)
-      // Navigate to maintenance history
-    },
-    viewDocuments(this: VehicleDetailsData & any): void {
-      console.log('View documents for:', this.vehicle.id)
-      // Navigate to documents page
-    },
-    viewInsurance(this: VehicleDetailsData & any): void {
-      console.log('View insurance for:', this.vehicle.id)
-      // Navigate to insurance page
-    },
-    goBack(this: VehicleDetailsData & any): void {
-      console.log('Go back to vehicles list')
-      // this.$navigator.goBack()
-    },
-    loadVehicleData(this: VehicleDetailsData & any, vehicleId: string): void {
-      // Load vehicle data from backend
-      // this.$http.get(`/api/vehicles/${vehicleId}`)
-      //   .then(response => {
-      //     this.vehicle = response.data
-      //   })
-    }
+const getVehicleTypeLabel = (type: string): string => {
+  const typeMap: { [key: string]: string } = {
+    sedan: '🚗 Berline',
+    suv: '🏎️ SUV',
+    truck: '🚚 Camion',
+    other: '🚙 Autre'
   }
+  return typeMap[type] || 'Type inconnu'
+}
+
+const editVehicle = () => {
+  console.log('Edit vehicle:', vehicle.value.id)
+  // this.$navigator.navigate({
+  //   moduleName: 'components/AddVehicle',
+  //   context: { vehicleId: vehicle.value.id }
+  // })
+}
+
+const deleteVehicle = () => {
+  console.log('Delete vehicle:', vehicle.value.id)
+  // Show confirmation dialog
+  // Then call backend to delete
+}
+
+const viewMaintenanceHistory = () => {
+  console.log('View maintenance history for:', vehicle.value.id)
+  // Navigate to maintenance history
+}
+
+const viewDocuments = () => {
+  console.log('View documents for:', vehicle.value.id)
+  // Navigate to documents page
+}
+
+const viewInsurance = () => {
+  console.log('View insurance for:', vehicle.value.id)
+  // Navigate to insurance page
+}
+
+const goBack = () => {
+  console.log('Go back to vehicles list')
+  // this.$navigator.goBack()
+}
+
+const loadVehicleData = (vehicleId: string) => {
+  // Load vehicle data from backend
+  // this.$http.get(`/api/vehicles/${vehicleId}`)
+  //   .then(response => {
+  //     vehicle.value = response.data
+  //   })
 }
 </script>
 
