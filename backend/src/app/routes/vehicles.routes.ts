@@ -1,6 +1,10 @@
 import { Router } from 'express';
-import * as controller from '../controllers/vehicles.controller';
+import { listVehicles, createVehicle, getVehicle, updateVehicle } from '../controllers/vehicles.controller';
 
 const router = Router();
-router.get('/', controller.placeholder);
+router.get('/', listVehicles);
+router.post('/', createVehicle);
+router.get('/:id', getVehicle);
+router.patch('/:id', updateVehicle);
+
 export default router;

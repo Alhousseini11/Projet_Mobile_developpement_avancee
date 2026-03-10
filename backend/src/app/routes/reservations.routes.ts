@@ -1,11 +1,19 @@
 import { Router } from 'express';
-import * as controller from '../controllers/reservations.controller';
+import {
+  listReservations,
+  createReservation,
+  getReservation,
+  updateReservation,
+  addReservationPhoto,
+  payReservation,
+} from '../controllers/reservations.controller';
 
 const router = Router();
-router.get('/', controller.placeholder);
-router.post('/', controller.placeholder);
-router.get('/:id', controller.placeholder);
-router.patch('/:id', controller.placeholder);
-router.post('/:id/photos', controller.placeholder);
-router.post('/:id/pay', controller.placeholder);
+router.get('/', listReservations);
+router.post('/', createReservation);
+router.get('/:id', getReservation);
+router.patch('/:id', updateReservation);
+router.post('/:id/photos', addReservationPhoto);
+router.post('/:id/pay', payReservation);
+
 export default router;

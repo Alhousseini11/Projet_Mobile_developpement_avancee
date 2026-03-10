@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import * as controller from '../controllers/notifications.controller';
+import { listNotifications } from '../controllers/notifications.controller';
 
 const router = Router();
-router.get('/', controller.placeholder);
+router.get('/', listNotifications);
+
 export default router;

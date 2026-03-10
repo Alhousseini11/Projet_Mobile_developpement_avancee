@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import * as controller from '../controllers/chat.controller';
+import { listMessages } from '../controllers/chat.controller';
 
 const router = Router();
-router.get('/', controller.placeholder);
+router.get('/', listMessages);
+
 export default router;
