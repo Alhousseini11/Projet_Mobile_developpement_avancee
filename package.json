@@ -3,6 +3,12 @@
   "main": "app/app.ts",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "android": "ns run android",
+    "ios": "ns run ios",
+    "clean": "ns clean",
+    "type-check": "tsc --noEmit"
+  },
   "dependencies": {
     "@nativescript/core": "~9.0.0",
     "nativescript-vue": "^3.0.0"

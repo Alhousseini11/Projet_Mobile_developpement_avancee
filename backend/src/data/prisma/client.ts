@@ -1,13 +1,11 @@
-import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL manquant : définis-le dans backend/.env');
-}
+const connectionString =
+  process.env.DATABASE_URL ?? 'postgresql://postgres:Al98970071@localhost:5432/garage';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 
 export const prisma = new PrismaClient({

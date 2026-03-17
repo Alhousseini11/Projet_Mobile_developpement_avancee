@@ -33,10 +33,51 @@ enum Severity {
   CRITICAL
 }
 
+enum VehicleType {
+  sedan
+  suv
+  truck
+  minivan
+  coupe
+  other
+}
+
+enum TutorialCategory {
+  entretien
+  freins
+  suspension
+  batterie
+  diagnostic
+  eclairage
+  fluide
+  mecanique
+}
+
 enum TutorialDifficulty {
-  EASY
-  MEDIUM
-  HARD
+  facile
+  moyen
+  difficile
+}
+
+enum MaintenanceType {
+  oil_change
+  tire_rotation
+  brake_service
+  battery_replacement
+  filter_change
+  inspection
+  repair
+  other
+}
+
+enum DocumentType {
+  registration
+  insurance
+  mot
+  service_history
+  warranty
+  inspection
+  other
 }
 
 model User {
@@ -62,19 +103,75 @@ model User {
 }
 
 model Vehicle {
-  id        String     @id @default(cuid())
-  userId    String
-  brand     String
-  model     String
-  year      Int
-  mileage   Int?
-  reminders Reminder[]
-  user      User       @relation(fields: [userId], references: [id])
+  id                 String              @id @default(cuid())
+  userId             String
+  name               String
+  model              String
+  year               Int
+  mileage            Int
+  type               VehicleType
+  licensePlate       String?
+  fuelType           String?
+  vin                String?
+  color              String?
+  reservations       Reservation[]
+  reminders          Reminder[]
+  maintenanceRecords MaintenanceRecord[]
+  documents          VehicleDocument[]
+  insurance          VehicleInsurance?
+  user               User                @relation(fields: [userId], references: [id])
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model MaintenanceRecord {
+  id                String          @id @default(cuid())
+  vehicleId         String
+  type              MaintenanceType
+  description       String
+  mileage           Int
+  cost              Decimal         @db.Decimal(10, 2)
+  date              DateTime
+  notes             String?
+  nextMaintenanceKm Int?
+  nextMaintenanceDate DateTime?
+  attachments       Json?
+  vehicle           Vehicle         @relation(fields: [vehicleId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model VehicleDocument {
+  id         String       @id @default(cuid())
+  vehicleId  String
+  type       DocumentType
+  title      String
+  fileUrl    String
+  expiryDate DateTime?
+  uploadedAt DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  vehicle    Vehicle      @relation(fields: [vehicleId], references: [id])
+}
+
+model VehicleInsurance {
+  id          String   @id @default(cuid())
+  vehicleId   String   @unique
+  provider    String
+  policyNumber String
+  startDate   DateTime
+  endDate     DateTime
+  coverage    String
+  phoneNumber String?
+  documentUrl String?
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Reservation {
   id          String             @id @default(cuid())
   userId      String
+  vehicleId   String?
   mechanicId  String?
   serviceType String
   description String?
@@ -87,6 +184,7 @@ model Reservation {
   locationId  String?
   reviews     Review[]
   user        User               @relation(fields: [userId], references: [id])
+  vehicle     Vehicle?           @relation(fields: [vehicleId], references: [id])
   mechanic    User?              @relation("MechanicReservations", fields: [mechanicId], references: [id])
   location    Location?          @relation(fields: [locationId], references: [id])
   createdAt   DateTime           @default(now())
@@ -101,15 +199,21 @@ model ReservationPhoto {
 }
 
 model Tutorial {
-  id          String             @id @default(cuid())
-  title       String
-  category    String
-  difficulty  TutorialDifficulty
-  videoUrl    String
-  thumbnail   String?
-  durationSec Int?
-  favorites   Favorite[]
-  createdAt   DateTime           @default(now())
+  id           String             @id @default(cuid())
+  title        String
+  description  String
+  category     TutorialCategory
+  difficulty   TutorialDifficulty
+  duration     Int
+  views        Int                @default(0)
+  rating       Float              @default(0)
+  thumbnail    String
+  videoUrl     String
+  instructions Json
+  tools        Json?
+  favorites    Favorite[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 }
 
 model Favorite {
