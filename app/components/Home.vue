@@ -1,499 +1,399 @@
 <template>
-  <Page @loaded="onPageLoaded" class="bg-gray-900">
-    <!-- ActionBar with Menu -->
-    <ActionBar title="Mon Garage" class="bg-red-600">
-      <GridLayout columns="auto,*,auto" class="w-full">
-        <!-- Menu Hamburger -->
-        <GridLayout
-          col="0"
-          rows="auto,auto,auto"
-          class="justify-center items-center px-4 py-2"
-          @tap="toggleMenu"
-        >
-          <StackLayout row="0" class="h-1 bg-white mb-1" width="24" />
-          <StackLayout row="1" class="h-1 bg-white mb-1" width="24" />
-          <StackLayout row="2" class="h-1 bg-white" width="24" />
-        </GridLayout>
-
-        <!-- Title -->
-        <Label col="1" text="Tableau de Bord" class="text-white text-lg font-bold text-center" />
-
-        <!-- Settings Icon -->
-        <Label
-          col="2"
-          text="⚙️"
-          class="text-white text-2xl px-4 py-2"
-          @tap="openSettings"
-        />
-      </GridLayout>
-    </ActionBar>
-
-    <!-- Side Menu (Drawer) -->
-    <GridLayout
-      v-if="menuOpen"
-      rows="*"
-      columns="*"
-      class="absolute z-50 w-full h-full bg-black/50"
-      @tap="toggleMenu"
-    >
-      <StackLayout
-        class="bg-gray-800 w-64 h-full px-4 py-6"
-        @tap.stop="() => {}"
-      >
-        <!-- Menu Header -->
-        <GridLayout rows="auto" columns="auto,*" class="mb-6 items-center">
-          <Label col="0" text="👤" class="text-3xl mr-3" />
-          <StackLayout col="1">
-            <Label text="Alex Dupont" class="text-white font-bold text-lg" />
-            <Label text="alex@example.com" class="text-gray-400 text-sm" />
-          </StackLayout>
-        </GridLayout>
-
-        <Separator class="bg-gray-600 mb-4" />
-
-        <!-- Menu Items -->
-        <StackLayout class="mb-4">
-          <Label text="MENU" class="text-gray-500 text-xs font-bold mb-3" />
-          <GridLayout
-            rows="auto"
-            columns="auto,*"
-            class="mb-4 items-center"
-            @tap="handleMenuItem('home'); toggleMenu()"
-          >
-            <Label col="0" text="🏠" class="text-xl mr-3 text-red-600" />
-            <Label col="1" text="Accueil" class="text-white" />
-          </GridLayout>
-
-          <GridLayout
-            rows="auto"
-            columns="auto,*"
-            class="mb-4 items-center"
-            @tap="handleMenuItem('reservations'); toggleMenu()"
-          >
-            <Label col="0" text="📅" class="text-xl mr-3 text-red-600" />
-            <Label col="1" text="Mes Rendez-vous" class="text-white" />
-          </GridLayout>
-
-          <GridLayout
-            rows="auto"
-            columns="auto,*"
-            class="mb-4 items-center"
-            @tap="handleMenuItem('vehicles'); toggleMenu()"
-          >
-            <Label col="0" text="🚗" class="text-xl mr-3 text-red-600" />
-            <Label col="1" text="Mes Véhicules" class="text-white" />
-          </GridLayout>
-
-          <GridLayout
-            rows="auto"
-            columns="auto,*"
-            class="mb-4 items-center"
-            @tap="handleMenuItem('tutorials'); toggleMenu()"
-          >
-            <Label col="0" text="🎓" class="text-xl mr-3 text-red-600" />
-            <Label col="1" text="Tutoriels" class="text-white" />
-          </GridLayout>
-
-          <GridLayout
-            rows="auto"
-            columns="auto,*"
-            class="mb-4 items-center"
-            @tap="handleMenuItem('profile'); toggleMenu()"
-          >
-            <Label col="0" text="⚙️" class="text-xl mr-3 text-red-600" />
-            <Label col="1" text="Paramètres" class="text-white" />
-          </GridLayout>
-        </StackLayout>
-
-        <Separator class="bg-gray-600 mb-4" />
-
-        <!-- Logout -->
-        <GridLayout
-          rows="auto"
-          columns="auto,*"
-          class="items-center mt-4"
-          @tap="logout"
-        >
-          <Label col="0" text="🚪" class="text-xl mr-3 text-red-600" />
-          <Label col="1" text="Déconnexion" class="text-white" />
-        </GridLayout>
-      </StackLayout>
-    </GridLayout>
-
-    <!-- Main Content -->
-    <GridLayout rows="*,60" class="bg-gray-900">
-      <ScrollView row="0" class="bg-gray-900">
-        <StackLayout class="px-4 py-6">
-          <!-- Welcome Card -->
-          <GridLayout
-            rows="auto,auto,auto"
-            columns="*"
-            class="bg-red-700 rounded-xl p-6 mb-6"
-          >
-            <Label
-              row="0"
-              :text="`Bonjour ${userName}!`"
-              class="text-white text-2xl font-bold mb-2"
-            />
-            <Label
-              row="1"
-              text="Prochain rendez-vous:"
-              class="text-red-100 text-sm mb-1"
-            />
-            <Label
-              row="2"
-              text="📅 Lundi 12 Juillet à 10h00"
-              class="text-white text-lg font-bold"
-            />
-          </GridLayout>
-
-          <!-- Search & Promotion Section -->
-          <StackLayout class="mb-6">
-            <Label
-              text="🎯 Découvrez nos Promotions"
-              class="text-white text-lg font-bold mb-3"
-            />
-
-            <!-- Search Bar -->
-            <GridLayout
-              rows="auto"
-              columns="*,auto"
-              class="bg-gray-800 rounded-lg px-4 py-3 mb-4 items-center"
-            >
-              <TextField
-                col="0"
-                v-model="searchPromo"
-                hint="Rechercher une promo..."
-                class="text-white placeholder-gray-500"
-              />
-              <Label
-                col="1"
-                text="🔍"
-                class="text-white text-xl"
-                @tap="searchPromotions"
-              />
+  <Page actionBarHidden="true" @loaded="onPageLoaded" class="page">
+    <GridLayout rows="*,72" class="page-shell">
+      <ScrollView row="0">
+        <StackLayout class="content">
+          <GridLayout rows="48,150" class="hero-card">
+            <GridLayout row="0" columns="auto,*,auto" class="hero-topbar">
+              <Label text="☰" col="0" class="hero-menu" />
+              <Label text="Garage+" col="1" class="hero-brand" />
+              <Label text="● ● ●" col="2" class="hero-status" />
             </GridLayout>
 
-            <!-- Promotion Cards -->
-            <GridLayout
-              rows="auto"
-              columns="*"
-              class="bg-yellow-500 rounded-xl overflow-hidden mb-4 shadow-md"
-              @tap="viewPromotion(0)"
-            >
-              <StackLayout class="p-4">
-                <!-- Image Placeholder -->
-                <GridLayout
-                  rows="120"
-                  columns="*"
-                  class="bg-yellow-400 rounded-lg mb-4 items-center justify-center"
-                >
-                  <Label text="🛠️" class="text-6xl" />
-                </GridLayout>
+            <GridLayout row="1" class="hero-visual">
+              <GridLayout class="hero-shade" />
+              <GridLayout class="hero-glow hero-glow-left" />
+              <GridLayout class="hero-glow hero-glow-right" />
+              <Label text="GARAGE" class="hero-watermark" />
+              <Label text="🚗" class="hero-car" />
 
-                <!-- Promo Details -->
-                <Label
-                  text="OFFRE SPÉCIALE - 20% DE RÉDUCTION"
-                  class="text-white font-bold text-lg mb-1"
-                />
-                <Label
-                  text="Entretien complet de freins + plaquettes"
-                  class="text-yellow-100 text-sm mb-2"
-                />
-                <Label
-                  text="Valid jusqu'au 31 Mars 2026"
-                  class="text-yellow-50 text-xs"
-                />
+              <StackLayout class="hero-copy">
+                <Label :text="'Bonjour ' + userName + '!'" class="hero-title" />
+                <Label text="Prochain RDV:" class="hero-subtitle" />
+                <Label text="Lundi 12 Juillet a 10h" class="hero-appointment" />
               </StackLayout>
             </GridLayout>
-
-            <GridLayout
-              rows="auto"
-              columns="*"
-              class="bg-blue-600 rounded-xl overflow-hidden shadow-md"
-              @tap="viewPromotion(1)"
-            >
-              <StackLayout class="p-4">
-                <!-- Image Placeholder -->
-                <GridLayout
-                  rows="120"
-                  columns="*"
-                  class="bg-blue-500 rounded-lg mb-4 items-center justify-center"
-                >
-                  <Label text="🛞" class="text-6xl" />
-                </GridLayout>
-
-                <!-- Promo Details -->
-                <Label
-                  text="PNEUS USÉS? CHANGEZ LES!"
-                  class="text-white font-bold text-lg mb-1"
-                />
-                <Label
-                  text="Achat 3 pneus + 1 GRATUIT (Michelin & Goodyear)"
-                  class="text-blue-100 text-sm mb-2"
-                />
-                <Label
-                  text="Code: PNEUS2026"
-                  class="text-blue-50 text-xs font-bold"
-                />
-              </StackLayout>
-            </GridLayout>
-          </StackLayout>
-
-          <!-- CTA Button - Prendre RDV -->
-          <GridLayout
-            rows="auto"
-            columns="*"
-            class="bg-red-600 rounded-xl p-5 mb-6"
-            @tap="navigateTo('reservations')"
-          >
-            <StackLayout rows="auto" class="items-center justify-center">
-              <Label
-                text="📅 PRENDRE UN RENDEZ-VOUS"
-                class="text-white text-center font-bold text-base mb-1"
-              />
-              <Label
-                text="Réservez maintenant votre créneau"
-                class="text-red-100 text-center text-xs"
-              />
-            </StackLayout>
           </GridLayout>
 
-          <!-- Reminders Section -->
-          <StackLayout class="mb-4">
-            <GridLayout columns="*,auto" class="items-center mb-3">
-              <Label col="0" text="🔔 Mes Rappels & Alertes" class="text-white text-lg font-bold" />
-              <Label
-                col="1"
-                text="3"
-                class="bg-red-600 text-white rounded-full text-center text-sm font-bold w-6 h-6"
-              />
-            </GridLayout>
-
-            <!-- Reminder 1 - Important -->
+          <StackLayout class="action-stack">
             <GridLayout
-              rows="auto,auto"
-              columns="auto,*,auto"
-              class="bg-red-900/30 border-l-4 border-red-500 rounded-lg p-4 mb-3"
+              v-for="action in quickActions"
+              :key="action.id"
+              columns="56,*"
+              class="action-card"
+              :class="action.variant"
+              @tap="navigateTo(action.page)"
             >
-              <Label col="0" row="0" text="⚠️" class="text-xl text-red-500 mr-3" />
-              <StackLayout col="1" rows="auto,auto">
-                <Label
-                  text="Vidange moteur"
-                  class="text-white font-bold text-base"
-                />
-                <Label
-                  text="À faire dans 500 km - Très important!"
-                  class="text-red-200 text-xs mt-1"
-                />
-              </StackLayout>
-              <Label col="2" row="0" text="🔴" class="text-lg text-red-500" />
-            </GridLayout>
-
-            <!-- Reminder 2 - Warning -->
-            <GridLayout
-              rows="auto,auto"
-              columns="auto,*,auto"
-              class="bg-yellow-900/30 border-l-4 border-yellow-500 rounded-lg p-4 mb-3"
-            >
-              <Label col="0" row="0" text="⚡" class="text-xl text-yellow-500 mr-3" />
-              <StackLayout col="1" rows="auto,auto">
-                <Label
-                  text="Contrôle technique"
-                  class="text-white font-bold text-base"
-                />
-                <Label
-                  text="À effectuer dans 2 mois"
-                  class="text-yellow-200 text-xs mt-1"
-                />
-              </StackLayout>
-              <Label col="2" row="0" text="🟡" class="text-lg text-yellow-500" />
-            </GridLayout>
-
-            <!-- Reminder 3 - Info -->
-            <GridLayout
-              rows="auto,auto"
-              columns="auto,*,auto"
-              class="bg-green-900/30 border-l-4 border-green-500 rounded-lg p-4"
-            >
-              <Label col="0" row="0" text="✅" class="text-xl text-green-500 mr-3" />
-              <StackLayout col="1" rows="auto,auto">
-                <Label
-                  text="Assurance auto"
-                  class="text-white font-bold text-base"
-                />
-                <Label
-                  text="À jour jusqu'au 15 mai 2026"
-                  class="text-green-200 text-xs mt-1"
-                />
-              </StackLayout>
-              <Label col="2" row="0" text="🟢" class="text-lg text-green-500" />
-            </GridLayout>
-          </StackLayout>
-
-          <!-- Quick Actions -->
-          <StackLayout class="mb-4">
-            <Label text="Actions Rapides" class="text-white text-lg font-bold mb-3" />
-
-            <GridLayout rows="auto" columns="*,*,*" column-spacing="8">
-              <GridLayout
-                col="0"
-                rows="auto,auto"
-                class="bg-gray-800 rounded-lg p-3 items-center justify-center"
-                @tap="navigateTo('vehicles')"
-              >
-                <Label row="0" text="🚗" class="text-3xl mb-2" />
-                <Label
-                  row="1"
-                  text="Véhicules"
-                  class="text-gray-300 text-center text-xs font-bold"
-                />
+              <GridLayout col="0" class="action-icon-shell">
+                <Label :text="action.icon" class="action-icon" />
               </GridLayout>
-
-              <GridLayout
-                col="1"
-                rows="auto,auto"
-                class="bg-gray-800 rounded-lg p-3 items-center justify-center"
-                @tap="navigateTo('tutorials')"
-              >
-                <Label row="0" text="🎓" class="text-3xl mb-2" />
-                <Label
-                  row="1"
-                  text="Tutoriels"
-                  class="text-gray-300 text-center text-xs font-bold"
-                />
-              </GridLayout>
-
-              <GridLayout
-                col="2"
-                rows="auto,auto"
-                class="bg-gray-800 rounded-lg p-3 items-center justify-center"
-                @tap="navigateTo('profile')"
-              >
-                <Label row="0" text="👤" class="text-3xl mb-2" />
-                <Label
-                  row="1"
-                  text="Profil"
-                  class="text-gray-300 text-center text-xs font-bold"
-                />
-              </GridLayout>
+              <Label col="1" :text="action.label" class="action-label" />
             </GridLayout>
           </StackLayout>
+
+          <GridLayout columns="40,*" class="banner promo-banner">
+            <Label text="🎁" col="0" class="banner-icon" />
+            <Label text="Promos: 20% sur les freins!" col="1" class="banner-text" />
+          </GridLayout>
+
+          <GridLayout columns="40,*" class="banner reminder-banner">
+            <Label text="⏰" col="0" class="banner-icon" />
+            <Label text="Rappel: Vidange a faire dans 500 km" col="1" class="banner-text dark" />
+          </GridLayout>
         </StackLayout>
       </ScrollView>
 
-      <!-- Bottom Navigation Bar -->
-      <GridLayout
-        row="1"
-        columns="*,*,*,*,*"
-        class="bg-gray-800 border-t border-gray-700"
-      >
-        <GridLayout col="0" class="items-center justify-center" @tap="navigateTo('home')">
-          <Label text="🏠" class="text-2xl text-red-600 font-bold" />
+      <GridLayout row="1" columns="*,*,*,*,*" class="bottom-nav">
+        <GridLayout col="0" class="nav-item active" @tap="navigateTo('home')">
+          <StackLayout class="nav-stack">
+            <Label text="🏠" class="nav-icon" />
+            <Label text="Accueil" class="nav-label" />
+          </StackLayout>
         </GridLayout>
-        <GridLayout col="1" class="items-center justify-center" @tap="navigateTo('reservations')">
-          <Label text="📅" class="text-2xl text-gray-400" />
+
+        <GridLayout col="1" class="nav-item" @tap="navigateTo('reservations')">
+          <StackLayout class="nav-stack">
+            <Label text="📅" class="nav-icon" />
+            <Label text="Reserver" class="nav-label" />
+          </StackLayout>
         </GridLayout>
-        <GridLayout col="2" class="items-center justify-center" @tap="navigateTo('tutorials')">
-          <Label text="🎓" class="text-2xl text-gray-400" />
+
+        <GridLayout col="2" class="nav-item" @tap="navigateTo('tutorials')">
+          <StackLayout class="nav-stack">
+            <Label text="🎥" class="nav-icon" />
+            <Label text="Tutoriels" class="nav-label" />
+          </StackLayout>
         </GridLayout>
-        <GridLayout col="3" class="items-center justify-center" @tap="navigateTo('vehicles')">
-          <Label text="🚗" class="text-2xl text-gray-400" />
+
+        <GridLayout col="3" class="nav-item" @tap="navigateTo('vehicles')">
+          <StackLayout class="nav-stack">
+            <Label text="🚗" class="nav-icon" />
+            <Label text="Vehicules" class="nav-label" />
+          </StackLayout>
         </GridLayout>
-        <GridLayout col="4" class="items-center justify-center" @tap="navigateTo('profile')">
-          <Label text="👤" class="text-2xl text-gray-400" />
+
+        <GridLayout col="4" class="nav-item" @tap="navigateTo('profile')">
+          <StackLayout class="nav-stack">
+            <Label text="👤" class="nav-icon" />
+            <Label text="Profil" class="nav-label" />
+          </StackLayout>
         </GridLayout>
       </GridLayout>
     </GridLayout>
   </Page>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted, computed } from 'nativescript-vue'
-import { HomeService } from '../services/HomeService'
+<script lang="ts" setup>
+import { computed } from 'nativescript-vue'
+import AuthService, { authState } from '@/services/AuthService'
+import { navigateToPage, type AppPage } from '@/utils/navigation'
 
-// Services
-const homeService = new HomeService()
-
-// States
-const userName = ref('')
-const promotions = ref<any[]>([])
-const reminders = ref<any[]>([])
-const upcomingReservation = ref<any>(null)
-const menuOpen = ref(false)
-const searchPromo = ref('')
-const loading = ref(false)
-const error = ref('')
-
-// Computed
-const filteredPromotions = computed(() =>
-  promotions.value.filter(p =>
-    p.title.toLowerCase().includes(searchPromo.value.toLowerCase())
-  )
-)
-
-async function loadHomeData() {
-  try {
-    loading.value = true
-    error.value = ''
-    const data = await homeService.getHomeData()
-    userName.value = data.userName
-    promotions.value = data.promotions
-    reminders.value = data.reminders
-    upcomingReservation.value = data.upcomingReservation
-  } catch (err) {
-    error.value = 'Erreur: Impossible de charger les données'
-    console.error('Home data error:', err)
-  } finally {
-    loading.value = false
-  }
+interface QuickAction {
+  id: string
+  label: string
+  icon: string
+  page: AppPage
+  variant: 'primary' | 'dark'
 }
+
+const userName = computed(() => {
+  const fullName = authState.session?.user.fullName ?? 'Alex Martin'
+  return fullName.split(' ')[0] ?? 'Alex'
+})
+
+const quickActions: QuickAction[] = [
+  {
+    id: 'rdv',
+    label: 'Prendre RDV',
+    icon: '🗓',
+    page: 'reservations',
+    variant: 'primary'
+  },
+  {
+    id: 'tutorials',
+    label: 'Tutoriels',
+    icon: '📹',
+    page: 'tutorials',
+    variant: 'dark'
+  },
+  {
+    id: 'vehicles',
+    label: 'Mes Vehicules',
+    icon: '🚘',
+    page: 'vehicles',
+    variant: 'dark'
+  }
+]
 
 function onPageLoaded() {
-  loadHomeData()
-}
-
-function toggleMenu() {
-  menuOpen.value = !menuOpen.value
-}
-
-function handleMenuItem(page: string) {
-  navigateTo(page)
-}
-
-function navigateTo(page: string) {
-  console.log('Navigate to:', page)
-  // TODO: integrate with router/navigation
-}
-
-function openSettings() {
-  console.log('Open settings')
-}
-
-function logout() {
-  try {
-    localStorage.removeItem('authToken')
-    userName.value = ''
-    promotions.value = []
-    reminders.value = []
-    menuOpen.value = false
-    navigateTo('login')
-  } catch (err) {
-    console.error('Logout error:', err)
+  if (!AuthService.isAuthenticated()) {
+    void navigateToPage('login', { clearHistory: true })
+    return
   }
+
+  console.log('Home page loaded')
 }
 
-function searchPromotions() {
-  // Filter is already done via computed property
-  console.log('Searching for:', searchPromo.value)
+function navigateTo(page: AppPage) {
+  void navigateToPage(page, { currentPage: 'home' })
 }
-
-function viewPromotion(index: number) {
-  console.log('View promotion:', index)
-  // TODO: navigate to promotion details
-}
-
-onMounted(() => {
-  loadHomeData()
-})
 </script>
+
+<style scoped>
+.page {
+  background-color: #eceef2;
+}
+
+.page-shell {
+  background-color: #eceef2;
+}
+
+.content {
+  padding: 16 16 26 16;
+}
+
+.hero-card {
+  border-radius: 22;
+  overflow: hidden;
+  margin-bottom: 18;
+  background-color: #151a24;
+  shadow-color: #000000;
+  shadow-opacity: 0.2;
+  shadow-radius: 16;
+  shadow-offset: 0 6;
+}
+
+.hero-topbar {
+  background-color: #e53a33;
+  padding: 0 16;
+  vertical-align: center;
+}
+
+.hero-menu {
+  font-size: 21;
+  color: #ffffff;
+  font-weight: 700;
+  vertical-align: center;
+}
+
+.hero-brand {
+  color: #ffffff;
+  font-size: 13;
+  font-weight: 700;
+  letter-spacing: 1.1;
+  horizontal-align: center;
+  vertical-align: center;
+}
+
+.hero-status {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 9;
+  horizontal-align: right;
+  vertical-align: center;
+}
+
+.hero-visual {
+  background-color: #212734;
+}
+
+.hero-shade {
+  background-color: rgba(8, 11, 18, 0.7);
+}
+
+.hero-glow {
+  width: 160;
+  height: 160;
+  border-radius: 80;
+  opacity: 0.85;
+}
+
+.hero-glow-left {
+  background-color: rgba(255, 255, 255, 0.08);
+  horizontal-align: left;
+  vertical-align: top;
+  margin-left: -30;
+  margin-top: -20;
+}
+
+.hero-glow-right {
+  background-color: rgba(229, 58, 51, 0.65);
+  horizontal-align: right;
+  vertical-align: center;
+  margin-right: -22;
+}
+
+.hero-watermark {
+  color: rgba(255, 255, 255, 0.08);
+  font-size: 56;
+  font-weight: 900;
+  letter-spacing: 2;
+  horizontal-align: left;
+  vertical-align: bottom;
+  margin-left: 12;
+  margin-bottom: -2;
+}
+
+.hero-car {
+  font-size: 72;
+  horizontal-align: right;
+  vertical-align: center;
+  margin-right: 18;
+  margin-top: 4;
+}
+
+.hero-copy {
+  horizontal-align: left;
+  vertical-align: center;
+  margin-left: 18;
+  margin-right: 122;
+}
+
+.hero-title {
+  color: #ffffff;
+  font-size: 24;
+  font-weight: 800;
+  margin-bottom: 6;
+}
+
+.hero-subtitle {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 14;
+  font-weight: 600;
+  margin-bottom: 4;
+}
+
+.hero-appointment {
+  color: #ffffff;
+  font-size: 16;
+  font-weight: 700;
+}
+
+.action-stack {
+  margin-bottom: 16;
+}
+
+.action-card {
+  border-radius: 12;
+  padding: 8 14;
+  margin-bottom: 10;
+  vertical-align: center;
+  shadow-color: #000000;
+  shadow-opacity: 0.16;
+  shadow-radius: 10;
+  shadow-offset: 0 3;
+}
+
+.action-card.primary {
+  background-color: #ef4339;
+}
+
+.action-card.dark {
+  background-color: #2b3443;
+}
+
+.action-icon-shell {
+  width: 34;
+  height: 34;
+  border-radius: 8;
+  background-color: rgba(255, 255, 255, 0.14);
+  vertical-align: center;
+  horizontal-align: left;
+}
+
+.action-icon {
+  color: #ffffff;
+  font-size: 18;
+  text-align: center;
+  vertical-align: center;
+}
+
+.action-label {
+  color: #ffffff;
+  font-size: 18;
+  font-weight: 700;
+  vertical-align: center;
+  margin-left: 12;
+}
+
+.banner {
+  border-radius: 10;
+  padding: 10 12;
+  margin-bottom: 10;
+  vertical-align: center;
+}
+
+.promo-banner {
+  background-color: #df4a43;
+}
+
+.reminder-banner {
+  background-color: #e6e8ec;
+}
+
+.banner-icon {
+  font-size: 18;
+  text-align: center;
+  vertical-align: center;
+}
+
+.banner-text {
+  color: #ffffff;
+  font-size: 16;
+  font-weight: 700;
+  vertical-align: center;
+}
+
+.banner-text.dark {
+  color: #242b35;
+}
+
+.bottom-nav {
+  background-color: #161c27;
+  border-top-left-radius: 18;
+  border-top-right-radius: 18;
+  border-top-width: 1;
+  border-top-color: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item {
+  align-items: center;
+  justify-content: center;
+  padding: 6 2 4 2;
+}
+
+.nav-stack {
+  horizontal-align: center;
+}
+
+.nav-icon {
+  font-size: 18;
+  text-align: center;
+  color: #f0f2f6;
+  margin-bottom: 1;
+}
+
+.nav-label {
+  font-size: 10;
+  font-weight: 700;
+  text-align: center;
+  color: #f0f2f6;
+}
+
+.nav-item.active .nav-icon {
+  color: #e53a33;
+}
+
+.nav-item.active .nav-label {
+  color: #e53a33;
+}
+</style>

@@ -4,19 +4,23 @@
   "main": "dist/index.js",
   "license": "MIT",
   "scripts": {
-    "dev": "ts-node-dev src/app/server.ts",
+    "dev": "set DATABASE_URL=%DATABASE_URL%&& ts-node-dev src/server.ts",
     "build": "tsc -p .",
-    "start": "node dist/app/server.js",
+    "start": "node dist/server.js",
     "lint": "eslint .",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.884.0",
+    "@prisma/adapter-pg": "^7.4.2",
     "@prisma/client": "7.4.1",
     "aws-sdk": "^2.1491.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "pg": "^8.20.0",
     "pino": "^9.0.0",
     "socket.io": "^4.7.5",
     "stripe": "^14.0.0"
@@ -24,9 +28,10 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.12.7",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.4.2",
+    "@types/pg": "^8.18.0",
     "eslint": "^8.57.0",
-    "prisma": "7.4.1"
+    "prisma": "7.4.1",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.2"
   }
 }

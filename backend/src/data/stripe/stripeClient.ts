@@ -1,2 +1,6 @@
 import Stripe from 'stripe';
-export const stripe = new Stripe(process.env.STRIPE_KEY || '', { apiVersion: '2023-10-16' });
+import { env } from '../../config/env';
+
+export function createStripeClient() {
+  return new Stripe(env.STRIPE_KEY, { apiVersion: '2023-10-16' });
+}

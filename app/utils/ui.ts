@@ -50,10 +50,15 @@ export function hideLoading(): void {
  * Format a number as currency (EUR)
  */
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR'
-  }).format(amount)
+  if (typeof Intl !== 'undefined' && typeof Intl.NumberFormat === 'function') {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(amount)
+  }
+
+  const normalized = Number.isInteger(amount) ? amount.toString() : amount.toFixed(2).replace('.', ',')
+  return `${normalized} EUR`
 }
 
 /**
@@ -65,7 +70,19 @@ export function formatDate(date: Date, format: string = 'short'): string {
       ? { year: 'numeric', month: '2-digit', day: '2-digit' }
       : { year: 'numeric', month: 'long', day: 'numeric' }
 
-  return new Intl.DateTimeFormat('fr-FR', options).format(date)
+  if (typeof Intl !== 'undefined' && typeof Intl.DateTimeFormat === 'function') {
+    return new Intl.DateTimeFormat('fr-FR', options).format(date)
+  }
+
+  const day = `${date.getDate()}`.padStart(2, '0')
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const year = date.getFullYear()
+
+  if (format === 'short') {
+    return `${day}/${month}/${year}`
+  }
+
+  return `${day}/${month}/${year}`
 }
 
 /**

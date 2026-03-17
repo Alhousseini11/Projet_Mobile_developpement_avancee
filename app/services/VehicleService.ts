@@ -3,248 +3,227 @@
  * Handles all vehicle-related API calls and data management
  */
 
+import {
+  CreateVehicleDTO,
+  MaintenanceRecord,
+  MaintenanceType,
+  UpdateVehicleDTO,
+  Vehicle,
+  VehicleDocument,
+  VehicleInsurance,
+  VehicleType,
+  FuelType,
+  DocumentType
+} from '@/types/vehicle'
+import { apiRequest } from '@/utils/api'
+
+export type {
+  Vehicle,
+  CreateVehicleDTO,
+  UpdateVehicleDTO,
+  MaintenanceRecord,
+  VehicleDocument,
+  VehicleInsurance
+} from '@/types/vehicle'
+
+const MOCK_USER_ID = 'demo-user'
+
 // Mock API responses for development
 const MOCK_VEHICLES: Vehicle[] = [
   {
     id: '1',
+    userId: MOCK_USER_ID,
     name: 'Toyota Corolla',
     model: 'Corolla 2018',
     year: 2018,
     mileage: 75000,
-    type: 'sedan',
+    type: VehicleType.SEDAN,
     licensePlate: 'AB-123-CD',
-    fuelType: 'Essence',
+    fuelType: FuelType.PETROL,
+    color: 'Gris',
     createdAt: new Date('2023-01-15'),
     updatedAt: new Date('2024-01-10')
   },
   {
     id: '2',
+    userId: MOCK_USER_ID,
     name: 'Renault Clio',
     model: 'Clio 2020',
     year: 2020,
     mileage: 45000,
-    type: 'sedan',
+    type: VehicleType.SEDAN,
     licensePlate: 'EF-456-GH',
-    fuelType: 'Diesel',
+    fuelType: FuelType.DIESEL,
+    color: 'Bleu',
     createdAt: new Date('2023-06-20'),
     updatedAt: new Date('2024-02-15')
   }
 ]
 
-export interface Vehicle {
-  id: string
-  name: string
-  model: string
-  year: number
-  mileage: number
-  type: 'sedan' | 'suv' | 'truck' | 'other'
-  licensePlate?: string
-  fuelType?: string
-  createdAt?: Date
-  updatedAt?: Date
-}
+const MOCK_MAINTENANCE_HISTORY: MaintenanceRecord[] = [
+  {
+    id: 'm-1',
+    vehicleId: '1',
+    type: MaintenanceType.OIL_CHANGE,
+    description: 'Vidange complete',
+    mileage: 70000,
+    cost: 89.9,
+    date: new Date('2024-01-05'),
+    nextMaintenanceKm: 80000,
+    createdAt: new Date('2024-01-05'),
+    updatedAt: new Date('2024-01-05')
+  }
+]
 
-export interface CreateVehicleDTO {
-  name: string
-  model: string
-  year: number
-  mileage: number
-  type: 'sedan' | 'suv' | 'truck' | 'other'
-  licensePlate?: string
-  fuelType?: string
-}
+const MOCK_DOCUMENTS: VehicleDocument[] = [
+  {
+    id: 'd-1',
+    vehicleId: '1',
+    type: DocumentType.REGISTRATION,
+    title: 'Carte grise',
+    fileUrl: 'https://example.com/documents/registration.pdf',
+    uploadedAt: new Date('2024-01-05'),
+    updatedAt: new Date('2024-01-05')
+  }
+]
 
-export interface UpdateVehicleDTO extends Partial<CreateVehicleDTO> {}
+const MOCK_INSURANCE: VehicleInsurance[] = [
+  {
+    id: 'i-1',
+    vehicleId: '1',
+    provider: 'AssureAuto',
+    policyNumber: 'POL-12345',
+    startDate: new Date('2024-01-01'),
+    endDate: new Date('2024-12-31'),
+    coverage: 'Tous risques',
+    phoneNumber: '+33 1 23 45 67 89',
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01')
+  }
+]
 
 class VehicleService {
-  private apiBaseUrl = 'http://localhost:3000/api'
+  private apiBaseUrl = '' // handled by apiRequest
   
-  /**
-   * Get all vehicles for the current user
-   */
   async getVehicles(): Promise<Vehicle[]> {
     try {
-      // Replace with actual API call when backend is ready
-      // const response = await fetch(`${this.apiBaseUrl}/vehicles`, {
-      //   method: 'GET',
-      //   headers: {
-      //     'Authorization': `Bearer ${this.getAuthToken()}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // })
-      // return await response.json()
-      
-      // Mock data for now
-      return Promise.resolve(MOCK_VEHICLES)
+      const data = await apiRequest<Vehicle[]>('/vehicles')
+      return data.map(this.normalizeVehicle)
     } catch (error) {
       console.error('Error fetching vehicles:', error)
-      throw error
+      return MOCK_VEHICLES
     }
   }
 
-  /**
-   * Get a single vehicle by ID
-   */
   async getVehicleById(vehicleId: string): Promise<Vehicle> {
     try {
-      // const response = await fetch(`${this.apiBaseUrl}/vehicles/${vehicleId}`, {
-      //   method: 'GET',
-      //   headers: {
-      //     'Authorization': `Bearer ${this.getAuthToken()}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // })
-      // return await response.json()
-      
-      const vehicle = MOCK_VEHICLES.find(v => v.id === vehicleId)
-      if (!vehicle) {
-        throw new Error(`Vehicle with ID ${vehicleId} not found`)
-      }
-      return Promise.resolve(vehicle)
+      const vehicle = await apiRequest<Vehicle>(`/vehicles/${vehicleId}`)
+      return this.normalizeVehicle(vehicle)
     } catch (error) {
       console.error('Error fetching vehicle:', error)
+      const fallback = MOCK_VEHICLES.find(v => v.id === vehicleId)
+      if (fallback) return fallback
       throw error
     }
   }
 
-  /**
-   * Create a new vehicle
-   */
   async createVehicle(data: CreateVehicleDTO): Promise<Vehicle> {
     try {
-      // const response = await fetch(`${this.apiBaseUrl}/vehicles`, {
-      //   method: 'POST',
-      //   headers: {
-      //     'Authorization': `Bearer ${this.getAuthToken()}`,
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify(data)
-      // })
-      // return await response.json()
-
+      const created = await apiRequest<Vehicle>('/vehicles', {
+        method: 'POST',
+        body: data
+      })
+      return this.normalizeVehicle(created)
+    } catch (error) {
+      console.error('Error creating vehicle:', error)
+      // fallback local mock creation
       const newVehicle: Vehicle = {
         id: (MOCK_VEHICLES.length + 1).toString(),
+        userId: MOCK_USER_ID,
         ...data,
         createdAt: new Date(),
         updatedAt: new Date()
       }
       MOCK_VEHICLES.push(newVehicle)
-      return Promise.resolve(newVehicle)
-    } catch (error) {
-      console.error('Error creating vehicle:', error)
-      throw error
+      return newVehicle
     }
   }
 
-  /**
-   * Update an existing vehicle
-   */
   async updateVehicle(vehicleId: string, data: UpdateVehicleDTO): Promise<Vehicle> {
     try {
-      // const response = await fetch(`${this.apiBaseUrl}/vehicles/${vehicleId}`, {
-      //   method: 'PUT',
-      //   headers: {
-      //     'Authorization': `Bearer ${this.getAuthToken()}`,
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify(data)
-      // })
-      // return await response.json()
-
-      const vehicleIndex = MOCK_VEHICLES.findIndex(v => v.id === vehicleId)
-      if (vehicleIndex === -1) {
-        throw new Error(`Vehicle with ID ${vehicleId} not found`)
-      }
-      
-      MOCK_VEHICLES[vehicleIndex] = {
-        ...MOCK_VEHICLES[vehicleIndex],
-        ...data,
-        updatedAt: new Date()
-      }
-      
-      return Promise.resolve(MOCK_VEHICLES[vehicleIndex])
+      const updated = await apiRequest<Vehicle>(`/vehicles/${vehicleId}`, {
+        method: 'PUT',
+        body: data
+      })
+      return this.normalizeVehicle(updated)
     } catch (error) {
       console.error('Error updating vehicle:', error)
+      const idx = MOCK_VEHICLES.findIndex(v => v.id === vehicleId)
+      if (idx > -1) {
+        MOCK_VEHICLES[idx] = { ...MOCK_VEHICLES[idx], ...data, updatedAt: new Date() }
+        return MOCK_VEHICLES[idx]
+      }
       throw error
     }
   }
 
-  /**
-   * Delete a vehicle
-   */
   async deleteVehicle(vehicleId: string): Promise<void> {
     try {
-      // const response = await fetch(`${this.apiBaseUrl}/vehicles/${vehicleId}`, {
-      //   method: 'DELETE',
-      //   headers: {
-      //     'Authorization': `Bearer ${this.getAuthToken()}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // })
-      // if (!response.ok) throw new Error('Failed to delete vehicle')
-
-      const vehicleIndex = MOCK_VEHICLES.findIndex(v => v.id === vehicleId)
-      if (vehicleIndex === -1) {
-        throw new Error(`Vehicle with ID ${vehicleId} not found`)
-      }
-      MOCK_VEHICLES.splice(vehicleIndex, 1)
-      return Promise.resolve()
+      await apiRequest<void>(`/vehicles/${vehicleId}`, { method: 'DELETE' })
     } catch (error) {
       console.error('Error deleting vehicle:', error)
+      // fallback delete mock
+      const vehicleIndex = MOCK_VEHICLES.findIndex(v => v.id === vehicleId)
+      if (vehicleIndex > -1) {
+        MOCK_VEHICLES.splice(vehicleIndex, 1)
+        return
+      }
       throw error
     }
   }
 
-  /**
-   * Get maintenance history for a vehicle
-   */
-  async getMaintenanceHistory(vehicleId: string): Promise<any[]> {
+  async getMaintenanceHistory(vehicleId: string): Promise<MaintenanceRecord[]> {
     try {
-      // const response = await fetch(`${this.apiBaseUrl}/vehicles/${vehicleId}/maintenance`, {
-      //   method: 'GET',
-      //   headers: {
-      //     'Authorization': `Bearer ${this.getAuthToken()}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // })
-      // return await response.json()
-      
-      return Promise.resolve([])
+      const data = await apiRequest<MaintenanceRecord[]>(`/vehicles/${vehicleId}/maintenance`)
+      return data
     } catch (error) {
       console.error('Error fetching maintenance history:', error)
-      throw error
+      return MOCK_MAINTENANCE_HISTORY.filter(record => record.vehicleId === vehicleId)
     }
   }
 
-  /**
-   * Get documents for a vehicle
-   */
-  async getVehicleDocuments(vehicleId: string): Promise<any[]> {
+  async getVehicleDocuments(vehicleId: string): Promise<VehicleDocument[]> {
     try {
-      // const response = await fetch(`${this.apiBaseUrl}/vehicles/${vehicleId}/documents`, {
-      //   method: 'GET',
-      //   headers: {
-      //     'Authorization': `Bearer ${this.getAuthToken()}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // })
-      // return await response.json()
-      
-      return Promise.resolve([])
+      const data = await apiRequest<VehicleDocument[]>(`/vehicles/${vehicleId}/documents`)
+      return data
     } catch (error) {
       console.error('Error fetching documents:', error)
-      throw error
+      return MOCK_DOCUMENTS.filter(document => document.vehicleId === vehicleId)
     }
   }
 
-  /**
-   * Helper method to get auth token
-   */
+  async getVehicleInsurance(vehicleId: string): Promise<VehicleInsurance | null> {
+    try {
+      const data = await apiRequest<VehicleInsurance>(`/vehicles/${vehicleId}/insurance`)
+      return data ? { ...data, startDate: new Date(data.startDate), endDate: new Date(data.endDate) } : null
+    } catch (error) {
+      console.error('Error fetching vehicle insurance:', error)
+      const insurance = MOCK_INSURANCE.find(item => item.vehicleId === vehicleId) ?? null
+      return insurance
+    }
+  }
+
   private getAuthToken(): string {
-    // Get from secure storage or session
     return 'mock-token'
+  }
+
+  private normalizeVehicle(vehicle: Vehicle): Vehicle {
+    return {
+      ...vehicle,
+      createdAt: new Date(vehicle.createdAt),
+      updatedAt: new Date(vehicle.updatedAt)
+    }
   }
 }
 
-// Export singleton instance
 export default new VehicleService()

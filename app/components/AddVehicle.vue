@@ -147,6 +147,7 @@
 
 <script lang="ts" setup>
 import { ref } from 'nativescript-vue'
+import { goBack as navigateBack } from '@/utils/navigation'
 
 interface VehicleForm {
   id?: string
@@ -159,8 +160,11 @@ interface VehicleForm {
   type: string
 }
 
-const isEditing = ref(false)
-const form = ref<VehicleForm>({
+const props = defineProps<{
+  vehicle?: VehicleForm
+}>()
+
+const defaultForm = (): VehicleForm => ({
   id: '',
   name: '',
   model: '',
@@ -171,13 +175,14 @@ const form = ref<VehicleForm>({
   type: 'sedan'
 })
 
+const isEditing = ref(Boolean(props.vehicle))
+const form = ref<VehicleForm>({
+  ...defaultForm(),
+  ...props.vehicle
+})
+
 const onPageLoaded = () => {
   console.log('AddVehicle page loaded')
-  // Check if we're editing by looking at navigation context
-  // if (this.$route.params?.vehicleId) {
-  //   isEditing.value = true
-  //   loadVehicleData(this.$route.params.vehicleId)
-  // }
 }
 
 const saveVehicle = () => {
@@ -204,8 +209,7 @@ const saveVehicle = () => {
 }
 
 const goBack = () => {
-  console.log('Go back to vehicles list')
-  // this.$navigator.goBack()
+  void navigateBack()
 }
 
 const loadVehicleData = (vehicleId: string) => {

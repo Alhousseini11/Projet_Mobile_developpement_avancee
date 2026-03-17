@@ -14,7 +14,6 @@ enum Role {
 
 enum ReservationStatus {
   PENDING
-  ASSIGNED
   CONFIRMED
   PAID
   CANCELLED
@@ -34,17 +33,51 @@ enum Severity {
   CRITICAL
 }
 
-enum TutorialDifficulty {
-  EASY
-  MEDIUM
-  HARD
+enum VehicleType {
+  sedan
+  suv
+  truck
+  minivan
+  coupe
+  other
 }
 
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  REFUNDED
+enum TutorialCategory {
+  entretien
+  freins
+  suspension
+  batterie
+  diagnostic
+  eclairage
+  fluide
+  mecanique
+}
+
+enum TutorialDifficulty {
+  facile
+  moyen
+  difficile
+}
+
+enum MaintenanceType {
+  oil_change
+  tire_rotation
+  brake_service
+  battery_replacement
+  filter_change
+  inspection
+  repair
+  other
+}
+
+enum DocumentType {
+  registration
+  insurance
+  mot
+  service_history
+  warranty
+  inspection
+  other
 }
 
 model User {
@@ -52,13 +85,9 @@ model User {
   email                String          @unique
   passwordHash         String
   fullName             String
-  firstName            String?
-  lastName             String?
-  phoneNumber          String?
   phone                String?
   role                 Role            @default(USER)
   photoUrl             String?
-  profilePicture       String?
   vehicles             Vehicle[]
   reservations         Reservation[]
   assignedReservations Reservation[]   @relation("MechanicReservations")
@@ -69,93 +98,129 @@ model User {
   notifications        Notification[]
   messagesSent         ChatMessage[]   @relation("MessagesSent")
   messagesReceived     ChatMessage[]   @relation("MessagesReceived")
-  reminders            Reminder[]
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 }
 
 model Vehicle {
-  id           String        @id @default(cuid())
-  userId       String
-  brand        String
-  model        String
-  year         Int
-  licensePlate String?
-  color        String?
-  mileage      Int?
-  photoUrl     String?
-  reminders    Reminder[]
-  reservations Reservation[]
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String              @id @default(cuid())
+  userId             String
+  name               String
+  model              String
+  year               Int
+  mileage            Int
+  type               VehicleType
+  licensePlate       String?
+  fuelType           String?
+  vin                String?
+  color              String?
+  reservations       Reservation[]
+  reminders          Reminder[]
+  maintenanceRecords MaintenanceRecord[]
+  documents          VehicleDocument[]
+  insurance          VehicleInsurance?
+  user               User                @relation(fields: [userId], references: [id])
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model MaintenanceRecord {
+  id                String          @id @default(cuid())
+  vehicleId         String
+  type              MaintenanceType
+  description       String
+  mileage           Int
+  cost              Decimal         @db.Decimal(10, 2)
+  date              DateTime
+  notes             String?
+  nextMaintenanceKm Int?
+  nextMaintenanceDate DateTime?
+  attachments       Json?
+  vehicle           Vehicle         @relation(fields: [vehicleId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model VehicleDocument {
+  id         String       @id @default(cuid())
+  vehicleId  String
+  type       DocumentType
+  title      String
+  fileUrl    String
+  expiryDate DateTime?
+  uploadedAt DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  vehicle    Vehicle      @relation(fields: [vehicleId], references: [id])
+}
+
+model VehicleInsurance {
+  id          String   @id @default(cuid())
+  vehicleId   String   @unique
+  provider    String
+  policyNumber String
+  startDate   DateTime
+  endDate     DateTime
+  coverage    String
+  phoneNumber String?
+  documentUrl String?
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Reservation {
-  id                 String            @id @default(cuid())
-  userId             String
-  vehicleId          String
-  mechanicId         String?
-  assignedMechanicId String?
-  serviceType        String
-  description        String?
-  status             ReservationStatus @default(PENDING)
-  paymentStatus      PaymentStatus     @default(PENDING)
-  paymentMethod      String?
-
-  // Time fields
-  scheduledAt        DateTime?
-  reservationDate    DateTime?
-  reservationTime    String?
-
-  // Contact fields
-  customerName       String?
-  customerEmail      String?
-  customerPhone      String?
-
-  // Amount fields
-  totalPrice         Decimal?          @db.Decimal(10, 2)
-  amount             Decimal?          @db.Decimal(10, 2)
-  currency           String            @default("EUR")
-
-  // Additional fields
-  notes              String?
-  locationId         String?
-
-  // Relations
-  photos             ReservationPhoto[]
-  reviews            Review[]
-  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vehicle            Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  mechanic           User?             @relation("MechanicReservations", fields: [mechanicId], references: [id])
-  location           Location?         @relation(fields: [locationId], references: [id])
-
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  id          String             @id @default(cuid())
+  userId      String
+  vehicleId   String?
+  mechanicId  String?
+  serviceType String
+  description String?
+  status      ReservationStatus  @default(PENDING)
+  scheduledAt DateTime
+  photos      ReservationPhoto[]
+  paymentId   String?
+  amount      Decimal            @db.Decimal(10, 2)
+  currency    String             @default("USD")
+  locationId  String?
+  reviews     Review[]
+  user        User               @relation(fields: [userId], references: [id])
+  vehicle     Vehicle?           @relation(fields: [vehicleId], references: [id])
+  mechanic    User?              @relation("MechanicReservations", fields: [mechanicId], references: [id])
+  location    Location?          @relation(fields: [locationId], references: [id])
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 }
 
 model ReservationPhoto {
   id            String      @id @default(cuid())
   reservationId String
   url           String
-  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservation   Reservation @relation(fields: [reservationId], references: [id])
 }
 
 model Tutorial {
-  id          String             @id @default(cuid())
-  title       String
-  category    String
-  difficulty  TutorialDifficulty
-  videoUrl    String
-  thumbnail   String?
-  durationSec Int?
-  favorites   Favorite[]
-  createdAt   DateTime           @default(now())
+  id           String             @id @default(cuid())
+  title        String
+  description  String
+  category     TutorialCategory
+  difficulty   TutorialDifficulty
+  duration     Int
+  views        Int                @default(0)
+  rating       Float              @default(0)
+  thumbnail    String
+  videoUrl     String
+  instructions Json
+  tools        Json?
+  favorites    Favorite[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 }
 
 model Favorite {
   userId     String
   tutorialId String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tutorial   Tutorial @relation(fields: [tutorialId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id])
+  tutorial   Tutorial @relation(fields: [tutorialId], references: [id])
 
   @@id([userId, tutorialId])
 }
@@ -166,8 +231,8 @@ model Review {
   reservationId String
   rating        Int
   comment       String?
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id])
+  reservation   Reservation @relation(fields: [reservationId], references: [id])
   createdAt     DateTime    @default(now())
 }
 
@@ -179,7 +244,7 @@ model Notification {
   body   String
   read   Boolean          @default(false)
   sentAt DateTime         @default(now())
-  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [userId], references: [id])
 }
 
 model Location {
@@ -192,14 +257,14 @@ model Location {
 }
 
 model PaymentMethod {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   userId    String
   stripeRef String
   brand     String?
   last4     String?
   expMonth  Int?
   expYear   Int?
-  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id])
 }
 
 model Quote {
@@ -207,9 +272,9 @@ model Quote {
   userId      String
   serviceType String
   estimated   Decimal  @db.Decimal(10, 2)
-  currency    String   @default("EUR")
+  currency    String   @default("USD")
   createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
 }
 
 model ChatMessage {
@@ -219,24 +284,15 @@ model ChatMessage {
   body       String?
   imageUrl   String?
   sentAt     DateTime @default(now())
-  sender     User     @relation("MessagesSent", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver   User     @relation("MessagesReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User     @relation("MessagesSent", fields: [senderId], references: [id])
+  receiver   User     @relation("MessagesReceived", fields: [receiverId], references: [id])
 }
 
 model Reminder {
   id        String   @id @default(cuid())
-  userId    String?
-  vehicleId String?
+  vehicleId String
   title     String
-  message   String?
-  dueDate   DateTime?
-  dueAt     DateTime?
+  dueAt     DateTime
   severity  Severity @default(INFO)
-  completed Boolean  @default(false)
-
-  user    User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id])
 }

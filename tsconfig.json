@@ -13,7 +13,7 @@
       "~/*": ["app/*"],
       "@/*": ["app/*"]
     },
-    "typeRoots": ["./node_modules/@types", "types"],
+    "typeRoots": ["types", "node_modules/@types"],
     "types": ["node"],
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
@@ -22,5 +22,5 @@
     "skipLibCheck": true
   },
   "include": ["app", "types"],
-  "exclude": ["node_modules", "platforms"]
+  "exclude": ["node_modules", "platforms", "app/examples"]
 }

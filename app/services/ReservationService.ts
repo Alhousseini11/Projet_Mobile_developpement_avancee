@@ -1,126 +1,183 @@
-/**
- * RESERVATION SERVICE
- * Service pour gérer toutes les opérations de réservation via l'API
- */
-
-import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
+import { apiRequest } from '@/utils/api'
 import type {
+  CreateReservationDTO,
   Reservation,
-  ReservationData,
-  CreateReservationRequest,
-  CreateReservationResponse,
-  GetReservationsResponse
-} from '../types/reservation'
+  ReservationServiceOption
+} from '@/types/reservation'
 
-export class ReservationService {
-  private api: AxiosInstance
+export type {
+  CreateReservationDTO,
+  Reservation,
+  ReservationServiceOption
+} from '@/types/reservation'
 
-  constructor(baseURL: string = 'http://localhost:3000/api') {
-    this.api = axios.create({
-      baseURL,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
-
-    // Ajouter le token JWT si présent
-    this.api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-      const token = localStorage.getItem('authToken')
-      if (token && config.headers) {
-        config.headers.Authorization = `Bearer ${token}`
-      }
-      return config
-    })
+const MOCK_SERVICES: ReservationServiceOption[] = [
+  {
+    id: 'oil-change',
+    label: 'Vidange',
+    durationMinutes: 45,
+    price: 79
+  },
+  {
+    id: 'brakes',
+    label: 'Freins',
+    durationMinutes: 90,
+    price: 149
+  },
+  {
+    id: 'battery',
+    label: 'Batterie',
+    durationMinutes: 30,
+    price: 99
+  },
+  {
+    id: 'diagnostic',
+    label: 'Diagnostic',
+    durationMinutes: 60,
+    price: 59
   }
+]
 
-  /**
-   * Créer une nouvelle réservation
-   */
-  async createReservation(data: ReservationData): Promise<CreateReservationResponse> {
-    try {
-      const payload: CreateReservationRequest = {
-        service: data.service,
-        selectedDate: data.selectedDate.toISOString().split('T')[0],
-        selectedTime: data.selectedTime,
-        vehicleId: data.vehicleId,
-        contact: data.contact,
-        payment: data.payment
-      }
+const MOCK_SLOT_BY_SERVICE: Record<string, string[]> = {
+  'oil-change': ['08:30', '10:00', '13:30', '15:00'],
+  brakes: ['09:00', '11:30', '14:00', '16:30'],
+  battery: ['08:00', '10:30', '13:00', '17:00'],
+  diagnostic: ['09:30', '12:00', '15:30', '18:00']
+}
 
-      const response = await this.api.post<CreateReservationResponse>('/reservations', payload)
-      return response.data
-    } catch (error) {
-      this.handleError('createReservation', error)
-      throw error
-    }
+const MOCK_RESERVATIONS: Reservation[] = []
+MOCK_RESERVATIONS.push(
+  {
+    id: 'reservation-1',
+    serviceId: 'oil-change',
+    serviceLabel: 'Vidange',
+    date: '2026-03-18',
+    time: '10:00',
+    status: 'confirmed',
+    createdAt: new Date('2026-03-10T09:00:00'),
+    updatedAt: new Date('2026-03-10T09:00:00')
+  },
+  {
+    id: 'reservation-2',
+    serviceId: 'diagnostic',
+    serviceLabel: 'Diagnostic',
+    date: '2026-03-22',
+    time: '15:30',
+    status: 'pending',
+    createdAt: new Date('2026-03-12T14:15:00'),
+    updatedAt: new Date('2026-03-12T14:15:00')
   }
+)
 
-  /**
-   * Récupérer toutes les réservations de l'utilisateur
-   */
-  async getUserReservations(): Promise<Reservation[]> {
-    try {
-      const response = await this.api.get<GetReservationsResponse>('/reservations/my-reservations')
-      return response.data.reservations
-    } catch (error) {
-      this.handleError('getUserReservations', error)
-      throw error
-    }
-  }
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`Request timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
 
-  /**
-   * Récupérer une réservation spécifique
-   */
-  async getReservation(id: string): Promise<Reservation> {
-    try {
-      const response = await this.api.get<Reservation>(`/reservations/${id}`)
-      return response.data
-    } catch (error) {
-      this.handleError('getReservation', error)
-      throw error
-    }
-  }
-
-  /**
-   * Annuler une réservation
-   */
-  async cancelReservation(id: string): Promise<{ success: boolean; message: string }> {
-    try {
-      const response = await this.api.put(`/reservations/${id}/cancel`)
-      return response.data
-    } catch (error) {
-      this.handleError('cancelReservation', error)
-      throw error
-    }
-  }
-
-  /**
-   * Obtenir les créneaux disponibles pour une date et service donnés
-   */
-  async getAvailableSlots(date: string, service: string): Promise<string[]> {
-    try {
-      const response = await this.api.get<string[]>('/reservations/available-slots', {
-        params: { date, service }
+    promise
+      .then(value => {
+        clearTimeout(timeoutId)
+        resolve(value)
       })
-      return response.data
+      .catch(error => {
+        clearTimeout(timeoutId)
+        reject(error)
+      })
+  })
+}
+
+class ReservationService {
+  getFallbackServices(): ReservationServiceOption[] {
+    return MOCK_SERVICES.map(service => ({ ...service }))
+  }
+
+  getFallbackAvailableSlots(serviceId: string, date: string): string[] {
+    const baseSlots = MOCK_SLOT_BY_SERVICE[serviceId] ?? ['09:00', '11:00', '14:00', '16:00']
+    const reservedSlots = MOCK_RESERVATIONS
+      .filter(reservation => reservation.serviceId === serviceId && reservation.date === date)
+      .map(reservation => reservation.time)
+
+    return baseSlots.filter(slot => !reservedSlots.includes(slot))
+  }
+
+  async getServices(): Promise<ReservationServiceOption[]> {
+    try {
+      const services = await withTimeout(
+        apiRequest<ReservationServiceOption[]>('/reservations/services'),
+        1200
+      )
+      return services
     } catch (error) {
-      this.handleError('getAvailableSlots', error)
-      throw error
+      console.error('Error fetching reservation services:', error)
+      return this.getFallbackServices()
     }
   }
 
-  /**
-   * Gestion des erreurs
-   */
-  private handleError(method: string, error: any): void {
-    if (axios.isAxiosError(error)) {
-      console.error(`ReservationService.${method} error:`, {
-        status: error.response?.status,
-        message: error.response?.data?.message || error.message,
-        data: error.response?.data
+  async getAvailableSlots(serviceId: string, date: string): Promise<string[]> {
+    try {
+      const slots = await withTimeout(
+        apiRequest<string[]>(
+          `/reservations/slots?serviceId=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}`
+        ),
+        1200
+      )
+      return slots
+    } catch (error) {
+      console.error(`Error fetching slots for ${serviceId} on ${date}:`, error)
+      return this.getFallbackAvailableSlots(serviceId, date)
+    }
+  }
+
+  getFallbackReservations(): Reservation[] {
+    return [...MOCK_RESERVATIONS]
+      .sort((left, right) => {
+        const leftKey = `${left.date}T${left.time}:00`
+        const rightKey = `${right.date}T${right.time}:00`
+        return leftKey.localeCompare(rightKey)
       })
-    } else {
-      console.error(`ReservationService.${method} error:`, error)
+      .map(reservation => this.normalize(reservation))
+  }
+
+  async getMyReservations(): Promise<Reservation[]> {
+    try {
+      const reservations = await withTimeout(apiRequest<Reservation[]>('/reservations'), 1200)
+      return reservations.map(reservation => this.normalize(reservation))
+    } catch (error) {
+      console.error('Error fetching reservations:', error)
+      return this.getFallbackReservations()
+    }
+  }
+
+  async createReservation(data: CreateReservationDTO): Promise<Reservation> {
+    try {
+      const created = await apiRequest<Reservation>('/reservations', {
+        method: 'POST',
+        body: data
+      })
+
+      return this.normalize(created)
+    } catch (error) {
+      console.error('Error creating reservation:', error)
+
+      const reservation: Reservation = {
+        id: `reservation-${MOCK_RESERVATIONS.length + 1}`,
+        ...data,
+        status: 'confirmed',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+
+      MOCK_RESERVATIONS.unshift(reservation)
+      return reservation
+    }
+  }
+
+  private normalize(reservation: Reservation): Reservation {
+    return {
+      ...reservation,
+      createdAt: new Date(reservation.createdAt),
+      updatedAt: new Date(reservation.updatedAt)
     }
   }
 }
