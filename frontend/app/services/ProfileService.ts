@@ -38,6 +38,8 @@ const MOCK_PAYMENT_METHOD: PaymentMethodSummary = {
 
 let fallbackProfileState: UserProfile = { ...MOCK_PROFILE }
 let fallbackPaymentState: PaymentMethodSummary = { ...MOCK_PAYMENT_METHOD }
+let profileRequest: Promise<UserProfile> | null = null
+let paymentMethodRequest: Promise<PaymentMethodSummary> | null = null
 
 function syncFallbackProfileIdentity() {
   const session = readStoredSession()
@@ -65,24 +67,6 @@ function clonePayment(payment: PaymentMethodSummary): PaymentMethodSummary {
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new Error(`Request timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
-
-    promise
-      .then(value => {
-        clearTimeout(timeoutId)
-        resolve(value)
-      })
-      .catch(error => {
-        clearTimeout(timeoutId)
-        reject(error)
-      })
-  })
-}
-
 class ProfileService {
   getFallbackProfile(): UserProfile {
     syncFallbackProfileIdentity()
@@ -95,25 +79,33 @@ class ProfileService {
 
   async getProfile(): Promise<UserProfile> {
     syncFallbackProfileIdentity()
-    try {
-      const profile = await withTimeout(apiRequest<UserProfile>('/profile'), 1500)
-      fallbackProfileState = cloneProfile(profile)
-      return cloneProfile(profile)
-    } catch (error) {
-      console.error('Error fetching profile:', error)
-      return this.getFallbackProfile()
+    if (profileRequest) {
+      return profileRequest.then(cloneProfile)
     }
+
+    profileRequest = (async () => {
+      try {
+        const profile = await apiRequest<UserProfile>('/profile', { timeoutMs: 6000 })
+        fallbackProfileState = cloneProfile(profile)
+        return cloneProfile(profile)
+      } catch (error) {
+        console.error('Error fetching profile:', error)
+        return this.getFallbackProfile()
+      } finally {
+        profileRequest = null
+      }
+    })()
+
+    return profileRequest.then(cloneProfile)
   }
 
   async updateProfile(data: Partial<UserProfile>): Promise<UserProfile> {
     try {
-      const profile = await withTimeout(
-        apiRequest<UserProfile>('/profile', {
-          method: 'PUT',
-          body: data
-        }),
-        1500
-      )
+      const profile = await apiRequest<UserProfile>('/profile', {
+        method: 'PUT',
+        body: data,
+        timeoutMs: 6000
+      })
       fallbackProfileState = cloneProfile(profile)
       return cloneProfile(profile)
     } catch (error) {
@@ -127,35 +119,42 @@ class ProfileService {
   }
 
   async getPaymentMethod(): Promise<PaymentMethodSummary> {
-    try {
-      const paymentMethod = await withTimeout(
-        apiRequest<PaymentMethodSummary>('/profile/payment-method'),
-        1500
-      )
-      fallbackPaymentState = clonePayment({
-        ...paymentMethod,
-        backendReachable: true
-      })
-      return clonePayment(fallbackPaymentState)
-    } catch (error) {
-      console.error('Error fetching payment method:', error)
-      fallbackPaymentState = {
-        ...fallbackPaymentState,
-        backendReachable: false,
-        message: 'Le backend de paiement est indisponible. Demarrez le serveur sur le port 3000 puis rafraichissez.'
-      }
-      return this.getFallbackPaymentMethod()
+    if (paymentMethodRequest) {
+      return paymentMethodRequest.then(clonePayment)
     }
+
+    paymentMethodRequest = (async () => {
+      try {
+        const paymentMethod = await apiRequest<PaymentMethodSummary>('/profile/payment-method', {
+          timeoutMs: 6000
+        })
+        fallbackPaymentState = clonePayment({
+          ...paymentMethod,
+          backendReachable: true
+        })
+        return clonePayment(fallbackPaymentState)
+      } catch (error) {
+        console.error('Error fetching payment method:', error)
+        fallbackPaymentState = {
+          ...fallbackPaymentState,
+          backendReachable: false,
+          message: 'Le backend de paiement est indisponible. Demarrez le serveur sur le port 3000 puis rafraichissez.'
+        }
+        return this.getFallbackPaymentMethod()
+      } finally {
+        paymentMethodRequest = null
+      }
+    })()
+
+    return paymentMethodRequest.then(clonePayment)
   }
 
   async createStripeCheckoutSession(): Promise<StripeCheckoutSessionResponse> {
-    const session = await withTimeout(
-      apiRequest<StripeCheckoutSessionResponse>('/profile/payment-method/checkout-session', {
-        method: 'POST',
-        body: {}
-      }),
-      4000
-    )
+    const session = await apiRequest<StripeCheckoutSessionResponse>('/profile/payment-method/checkout-session', {
+      method: 'POST',
+      body: {},
+      timeoutMs: 6000
+    })
 
     fallbackPaymentState = {
       ...fallbackPaymentState,
@@ -170,15 +169,13 @@ class ProfileService {
 
   async syncStripePaymentMethod(sessionId?: string): Promise<PaymentMethodSummary> {
     try {
-      const paymentMethod = await withTimeout(
-        apiRequest<PaymentMethodSummary>('/profile/payment-method/sync', {
-          method: 'POST',
-          body: {
-            sessionId: sessionId ?? fallbackPaymentState.lastCheckoutSessionId
-          }
-        }),
-        4000
-      )
+      const paymentMethod = await apiRequest<PaymentMethodSummary>('/profile/payment-method/sync', {
+        method: 'POST',
+        body: {
+          sessionId: sessionId ?? fallbackPaymentState.lastCheckoutSessionId
+        },
+        timeoutMs: 6000
+      })
 
       fallbackPaymentState = clonePayment(paymentMethod)
       return clonePayment(paymentMethod)

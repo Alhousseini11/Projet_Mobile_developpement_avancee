@@ -8,10 +8,19 @@ interface RequestOptions extends RequestInit {
   method?: HttpMethod
   body?: any
   headers?: Record<string, string>
+  timeoutMs?: number
+}
+
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isRetryableNetworkError(error: unknown) {
+  return error instanceof TypeError && error.message.toLowerCase().includes('network request failed')
 }
 
 async function apiRequest<T = any>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, headers = {}, ...rest } = options
+  const { method = 'GET', body, headers = {}, timeoutMs, ...rest } = options
   const finalHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     ...headers
@@ -23,12 +32,49 @@ async function apiRequest<T = any>(path: string, options: RequestOptions = {}): 
   }
 
   const url = `${API_BASE_URL}${path}`
-  const response = await fetch(url, {
-    method,
-    headers: finalHeaders,
-    body: body ? JSON.stringify(body) : undefined,
-    ...rest
-  })
+  const maxAttempts = method === 'GET' ? 2 : 1
+  let response: Response | null = null
+  let lastError: unknown = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = timeoutMs ? new AbortController() : null
+    const timeoutId =
+      controller && timeoutMs
+        ? setTimeout(() => {
+            controller.abort()
+          }, timeoutMs)
+        : null
+
+    try {
+      response = await fetch(url, {
+        method,
+        headers: finalHeaders,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller?.signal,
+        ...rest
+      })
+      break
+    } catch (error) {
+      lastError =
+        controller?.signal.aborted && timeoutMs
+          ? new Error(`Request timed out after ${timeoutMs}ms`)
+          : error
+
+      if (attempt >= maxAttempts || !isRetryableNetworkError(error)) {
+        throw lastError
+      }
+
+      await delay(250)
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+    }
+  }
+
+  if (!response) {
+    throw lastError instanceof Error ? lastError : new Error(`Unable to call ${url}`)
+  }
 
   console.log(`[API] ${method} ${url} -> ${response.status}`)
 

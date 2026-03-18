@@ -19,6 +19,8 @@ export const authState = reactive<AuthState>({
   session: null
 })
 
+let initializationPromise: Promise<void> | null = null
+
 function cloneSession(session: AuthSession | null): AuthSession | null {
   if (!session) {
     return null
@@ -56,21 +58,79 @@ function applySession(session: AuthSession, rememberMe: boolean) {
   writeStoredSession(session, rememberMe)
 }
 
+function clearAuthState() {
+  authState.session = null
+  authState.isAuthenticated = false
+  authState.initialized = true
+}
+
+function isInvalidSessionError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  return (
+    error.message.includes('401') ||
+    error.message.includes('Jeton invalide') ||
+    error.message.includes('Session invalide') ||
+    error.message.includes('Session introuvable')
+  )
+}
+
 class AuthService {
-  initializeSession() {
+  async initializeSession() {
     if (authState.initialized) {
       return
     }
 
-    const storedSession = readStoredSession()
-    if (!storedSession) {
-      authState.initialized = true
-      return
+    if (initializationPromise) {
+      return initializationPromise
     }
 
-    authState.session = cloneSession(storedSession)
-    authState.isAuthenticated = true
-    authState.initialized = true
+    initializationPromise = (async () => {
+      const storedSession = readStoredSession()
+      if (!storedSession) {
+        authState.initialized = true
+        return
+      }
+
+      authState.session = cloneSession(storedSession)
+      authState.isAuthenticated = true
+
+      if (!storedSession.refreshToken) {
+        authState.initialized = true
+        return
+      }
+
+      try {
+        const refreshedSession = await withTimeout(
+          apiRequest<AuthSession>('/auth/refresh', {
+            method: 'POST',
+            body: {
+              refreshToken: storedSession.refreshToken
+            }
+          }),
+          4000
+        )
+
+        applySession(refreshedSession, true)
+      } catch (error) {
+        if (isInvalidSessionError(error)) {
+          clearStoredSession()
+          clearAuthState()
+          return
+        }
+
+        console.warn('Unable to validate stored session, keeping local session:', error)
+        authState.initialized = true
+      }
+    })()
+
+    try {
+      await initializationPromise
+    } finally {
+      initializationPromise = null
+    }
   }
 
   getDemoCredentials() {
@@ -171,9 +231,7 @@ class AuthService {
   }
 
   logout() {
-    authState.session = null
-    authState.isAuthenticated = false
-    authState.initialized = true
+    clearAuthState()
     clearStoredSession()
   }
 }

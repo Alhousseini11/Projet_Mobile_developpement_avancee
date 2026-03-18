@@ -140,8 +140,8 @@ const showPassword = ref(false)
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 
-function onPageLoaded() {
-  AuthService.initializeSession()
+async function onPageLoaded() {
+  await AuthService.initializeSession()
 
   if (authState.isAuthenticated) {
     void navigateToPage('home', { clearHistory: true })

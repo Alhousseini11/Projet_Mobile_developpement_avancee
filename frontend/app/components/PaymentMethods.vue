@@ -189,8 +189,12 @@ const noticeCopy = computed(() => {
 })
 
 async function onPageLoaded() {
-  profile.value = await ProfileService.getProfile()
-  payment.value = await ProfileService.getPaymentMethod()
+  const [nextProfile, nextPayment] = await Promise.all([
+    ProfileService.getProfile(),
+    ProfileService.getPaymentMethod()
+  ])
+  profile.value = nextProfile
+  payment.value = nextPayment
   console.log('Payment methods page loaded')
 }
 
