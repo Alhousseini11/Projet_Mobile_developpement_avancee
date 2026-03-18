@@ -3,6 +3,8 @@ import * as controller from './reservations.controller';
 
 const router = Router();
 
+router.get('/services', controller.listReservationServices);
+router.get('/slots', controller.listAvailableSlots);
 router.get('/', controller.listReservations);
 router.post('/', controller.createReservation);
 router.get('/:id', controller.getReservationById);
