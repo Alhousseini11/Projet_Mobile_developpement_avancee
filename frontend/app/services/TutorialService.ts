@@ -39,27 +39,45 @@ const MOCK_TUTORIALS: Tutorial[] = [
   }
 ]
 
+const TUTORIAL_READ_TIMEOUT_MS = 10000
+
+let tutorialsRequest: Promise<Tutorial[]> | null = null
+
 class TutorialService {
   getFallbackTutorials(): Tutorial[] {
     return MOCK_TUTORIALS.map(tutorial => this.normalize(tutorial))
   }
 
   async getTutorials(): Promise<Tutorial[]> {
-    try {
-      const data = await apiRequest<Tutorial[]>('/tutorials')
-      return data.map(this.normalize)
-    } catch (error) {
-      console.error('Error fetching tutorials:', error)
-      return this.getFallbackTutorials()
+    if (tutorialsRequest) {
+      return tutorialsRequest.then(tutorials => tutorials.map(tutorial => this.normalize(tutorial)))
     }
+
+    tutorialsRequest = (async () => {
+      try {
+        const data = await apiRequest<Tutorial[]>('/tutorials', {
+          timeoutMs: TUTORIAL_READ_TIMEOUT_MS
+        })
+        return data.map(tutorial => this.normalize(tutorial))
+      } catch (error) {
+        console.warn('Error fetching tutorials:', error)
+        return this.getFallbackTutorials()
+      } finally {
+        tutorialsRequest = null
+      }
+    })()
+
+    return tutorialsRequest.then(tutorials => tutorials.map(tutorial => this.normalize(tutorial)))
   }
 
   async getTutorialById(tutorialId: string): Promise<Tutorial> {
     try {
-      const tutorial = await apiRequest<Tutorial>(`/tutorials/${tutorialId}`)
+      const tutorial = await apiRequest<Tutorial>(`/tutorials/${tutorialId}`, {
+        timeoutMs: TUTORIAL_READ_TIMEOUT_MS
+      })
       return this.normalize(tutorial)
     } catch (error) {
-      console.error(`Error fetching tutorial ${tutorialId}:`, error)
+      console.warn(`Error fetching tutorial ${tutorialId}:`, error)
       const fallback = MOCK_TUTORIALS.find(t => t.id === tutorialId)
       if (fallback) return fallback
       throw error
@@ -68,20 +86,24 @@ class TutorialService {
 
   async getTutorialsByCategory(category: TutorialCategory): Promise<Tutorial[]> {
     try {
-      const tutorials = await apiRequest<Tutorial[]>(`/tutorials/category/${category}`)
+      const tutorials = await apiRequest<Tutorial[]>(`/tutorials/category/${category}`, {
+        timeoutMs: TUTORIAL_READ_TIMEOUT_MS
+      })
       return tutorials.map(this.normalize)
     } catch (error) {
-      console.error(`Error fetching tutorials for category ${category}:`, error)
+      console.warn(`Error fetching tutorials for category ${category}:`, error)
       return MOCK_TUTORIALS.filter(t => t.category === category)
     }
   }
 
   async searchTutorials(query: string): Promise<Tutorial[]> {
     try {
-      const results = await apiRequest<Tutorial[]>(`/tutorials/search?q=${encodeURIComponent(query)}`)
+      const results = await apiRequest<Tutorial[]>(`/tutorials/search?q=${encodeURIComponent(query)}`, {
+        timeoutMs: TUTORIAL_READ_TIMEOUT_MS
+      })
       return results.map(this.normalize)
     } catch (error) {
-      console.error('Error searching tutorials:', error)
+      console.warn('Error searching tutorials:', error)
       const lowerQuery = query.toLowerCase()
       return MOCK_TUTORIALS.filter(t =>
         t.title.toLowerCase().includes(lowerQuery) ||
@@ -146,10 +168,12 @@ class TutorialService {
 
   async getPopularTutorials(limit: number = 5): Promise<Tutorial[]> {
     try {
-      const data = await apiRequest<Tutorial[]>(`/tutorials/popular?limit=${limit}`)
+      const data = await apiRequest<Tutorial[]>(`/tutorials/popular?limit=${limit}`, {
+        timeoutMs: TUTORIAL_READ_TIMEOUT_MS
+      })
       return data.map(this.normalize)
     } catch (error) {
-      console.error('Error fetching popular tutorials:', error)
+      console.warn('Error fetching popular tutorials:', error)
       const sorted = [...MOCK_TUTORIALS].sort((a, b) => b.views - a.views)
       return sorted.slice(0, limit)
     }
@@ -157,10 +181,12 @@ class TutorialService {
 
   async getTopRatedTutorials(limit: number = 5): Promise<Tutorial[]> {
     try {
-      const data = await apiRequest<Tutorial[]>(`/tutorials/top-rated?limit=${limit}`)
+      const data = await apiRequest<Tutorial[]>(`/tutorials/top-rated?limit=${limit}`, {
+        timeoutMs: TUTORIAL_READ_TIMEOUT_MS
+      })
       return data.map(this.normalize)
     } catch (error) {
-      console.error('Error fetching top rated tutorials:', error)
+      console.warn('Error fetching top rated tutorials:', error)
       const sorted = [...MOCK_TUTORIALS].sort((a, b) => b.rating - a.rating)
       return sorted.slice(0, limit)
     }

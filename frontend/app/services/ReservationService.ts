@@ -69,27 +69,27 @@ MOCK_RESERVATIONS.push(
   }
 )
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new Error(`Request timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
+const RESERVATION_READ_TIMEOUT_MS = 9000
 
-    promise
-      .then(value => {
-        clearTimeout(timeoutId)
-        resolve(value)
-      })
-      .catch(error => {
-        clearTimeout(timeoutId)
-        reject(error)
-      })
-  })
+let reservationServicesRequest: Promise<ReservationServiceOption[]> | null = null
+let reservationsRequest: Promise<Reservation[]> | null = null
+const slotsRequestByKey = new Map<string, Promise<string[]>>()
+
+function cloneService(service: ReservationServiceOption): ReservationServiceOption {
+  return { ...service }
+}
+
+function cloneReservation(reservation: Reservation): Reservation {
+  return {
+    ...reservation,
+    createdAt: new Date(reservation.createdAt),
+    updatedAt: new Date(reservation.updatedAt)
+  }
 }
 
 class ReservationService {
   getFallbackServices(): ReservationServiceOption[] {
-    return MOCK_SERVICES.map(service => ({ ...service }))
+    return MOCK_SERVICES.map(cloneService)
   }
 
   getFallbackAvailableSlots(serviceId: string, date: string): string[] {
@@ -102,31 +102,51 @@ class ReservationService {
   }
 
   async getServices(): Promise<ReservationServiceOption[]> {
-    try {
-      const services = await withTimeout(
-        apiRequest<ReservationServiceOption[]>('/reservations/services'),
-        1200
-      )
-      return services
-    } catch (error) {
-      console.error('Error fetching reservation services:', error)
-      return this.getFallbackServices()
+    if (reservationServicesRequest) {
+      return reservationServicesRequest.then(services => services.map(cloneService))
     }
+
+    reservationServicesRequest = (async () => {
+      try {
+        const services = await apiRequest<ReservationServiceOption[]>('/reservations/services', {
+          timeoutMs: RESERVATION_READ_TIMEOUT_MS
+        })
+        return services.map(cloneService)
+      } catch (error) {
+        console.warn('Error fetching reservation services:', error)
+        return this.getFallbackServices()
+      } finally {
+        reservationServicesRequest = null
+      }
+    })()
+
+    return reservationServicesRequest.then(services => services.map(cloneService))
   }
 
   async getAvailableSlots(serviceId: string, date: string): Promise<string[]> {
-    try {
-      const slots = await withTimeout(
-        apiRequest<string[]>(
-          `/reservations/slots?serviceId=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}`
-        ),
-        1200
-      )
-      return slots
-    } catch (error) {
-      console.error(`Error fetching slots for ${serviceId} on ${date}:`, error)
-      return this.getFallbackAvailableSlots(serviceId, date)
+    const requestKey = `${serviceId}:${date}`
+    const existingRequest = slotsRequestByKey.get(requestKey)
+    if (existingRequest) {
+      return existingRequest.then(slots => [...slots])
     }
+
+    const request = (async () => {
+      try {
+        const slots = await apiRequest<string[]>(
+          `/reservations/slots?serviceId=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}`,
+          { timeoutMs: RESERVATION_READ_TIMEOUT_MS }
+        )
+        return [...slots]
+      } catch (error) {
+        console.warn(`Error fetching slots for ${serviceId} on ${date}:`, error)
+        return this.getFallbackAvailableSlots(serviceId, date)
+      } finally {
+        slotsRequestByKey.delete(requestKey)
+      }
+    })()
+
+    slotsRequestByKey.set(requestKey, request)
+    return request.then(slots => [...slots])
   }
 
   getFallbackReservations(): Reservation[] {
@@ -140,13 +160,25 @@ class ReservationService {
   }
 
   async getMyReservations(): Promise<Reservation[]> {
-    try {
-      const reservations = await withTimeout(apiRequest<Reservation[]>('/reservations'), 1200)
-      return reservations.map(reservation => this.normalize(reservation))
-    } catch (error) {
-      console.error('Error fetching reservations:', error)
-      return this.getFallbackReservations()
+    if (reservationsRequest) {
+      return reservationsRequest.then(reservations => reservations.map(cloneReservation))
     }
+
+    reservationsRequest = (async () => {
+      try {
+        const reservations = await apiRequest<Reservation[]>('/reservations', {
+          timeoutMs: RESERVATION_READ_TIMEOUT_MS
+        })
+        return reservations.map(cloneReservation)
+      } catch (error) {
+        console.warn('Error fetching reservations:', error)
+        return this.getFallbackReservations()
+      } finally {
+        reservationsRequest = null
+      }
+    })()
+
+    return reservationsRequest.then(reservations => reservations.map(cloneReservation))
   }
 
   async createReservation(data: CreateReservationDTO): Promise<Reservation> {
@@ -174,11 +206,7 @@ class ReservationService {
   }
 
   private normalize(reservation: Reservation): Reservation {
-    return {
-      ...reservation,
-      createdAt: new Date(reservation.createdAt),
-      updatedAt: new Date(reservation.updatedAt)
-    }
+    return cloneReservation(reservation)
   }
 }
 

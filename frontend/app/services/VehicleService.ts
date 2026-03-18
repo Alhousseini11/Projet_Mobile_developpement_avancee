@@ -102,25 +102,43 @@ const MOCK_INSURANCE: VehicleInsurance[] = [
   }
 ]
 
+const VEHICLE_READ_TIMEOUT_MS = 10000
+
+let vehiclesRequest: Promise<Vehicle[]> | null = null
+
 class VehicleService {
   private apiBaseUrl = '' // handled by apiRequest
   
   async getVehicles(): Promise<Vehicle[]> {
-    try {
-      const data = await apiRequest<Vehicle[]>('/vehicles')
-      return data.map(this.normalizeVehicle)
-    } catch (error) {
-      console.error('Error fetching vehicles:', error)
-      return MOCK_VEHICLES
+    if (vehiclesRequest) {
+      return vehiclesRequest.then(vehicles => vehicles.map(vehicle => this.normalizeVehicle(vehicle)))
     }
+
+    vehiclesRequest = (async () => {
+      try {
+        const data = await apiRequest<Vehicle[]>('/vehicles', {
+          timeoutMs: VEHICLE_READ_TIMEOUT_MS
+        })
+        return data.map(vehicle => this.normalizeVehicle(vehicle))
+      } catch (error) {
+        console.warn('Error fetching vehicles:', error)
+        return MOCK_VEHICLES.map(vehicle => this.normalizeVehicle(vehicle))
+      } finally {
+        vehiclesRequest = null
+      }
+    })()
+
+    return vehiclesRequest.then(vehicles => vehicles.map(vehicle => this.normalizeVehicle(vehicle)))
   }
 
   async getVehicleById(vehicleId: string): Promise<Vehicle> {
     try {
-      const vehicle = await apiRequest<Vehicle>(`/vehicles/${vehicleId}`)
+      const vehicle = await apiRequest<Vehicle>(`/vehicles/${vehicleId}`, {
+        timeoutMs: VEHICLE_READ_TIMEOUT_MS
+      })
       return this.normalizeVehicle(vehicle)
     } catch (error) {
-      console.error('Error fetching vehicle:', error)
+      console.warn('Error fetching vehicle:', error)
       const fallback = MOCK_VEHICLES.find(v => v.id === vehicleId)
       if (fallback) return fallback
       throw error
@@ -184,30 +202,36 @@ class VehicleService {
 
   async getMaintenanceHistory(vehicleId: string): Promise<MaintenanceRecord[]> {
     try {
-      const data = await apiRequest<MaintenanceRecord[]>(`/vehicles/${vehicleId}/maintenance`)
+      const data = await apiRequest<MaintenanceRecord[]>(`/vehicles/${vehicleId}/maintenance`, {
+        timeoutMs: VEHICLE_READ_TIMEOUT_MS
+      })
       return data
     } catch (error) {
-      console.error('Error fetching maintenance history:', error)
+      console.warn('Error fetching maintenance history:', error)
       return MOCK_MAINTENANCE_HISTORY.filter(record => record.vehicleId === vehicleId)
     }
   }
 
   async getVehicleDocuments(vehicleId: string): Promise<VehicleDocument[]> {
     try {
-      const data = await apiRequest<VehicleDocument[]>(`/vehicles/${vehicleId}/documents`)
+      const data = await apiRequest<VehicleDocument[]>(`/vehicles/${vehicleId}/documents`, {
+        timeoutMs: VEHICLE_READ_TIMEOUT_MS
+      })
       return data
     } catch (error) {
-      console.error('Error fetching documents:', error)
+      console.warn('Error fetching documents:', error)
       return MOCK_DOCUMENTS.filter(document => document.vehicleId === vehicleId)
     }
   }
 
   async getVehicleInsurance(vehicleId: string): Promise<VehicleInsurance | null> {
     try {
-      const data = await apiRequest<VehicleInsurance>(`/vehicles/${vehicleId}/insurance`)
+      const data = await apiRequest<VehicleInsurance>(`/vehicles/${vehicleId}/insurance`, {
+        timeoutMs: VEHICLE_READ_TIMEOUT_MS
+      })
       return data ? { ...data, startDate: new Date(data.startDate), endDate: new Date(data.endDate) } : null
     } catch (error) {
-      console.error('Error fetching vehicle insurance:', error)
+      console.warn('Error fetching vehicle insurance:', error)
       const insurance = MOCK_INSURANCE.find(item => item.vehicleId === vehicleId) ?? null
       return insurance
     }

@@ -11,6 +11,8 @@ interface RequestOptions extends RequestInit {
   timeoutMs?: number
 }
 
+const GET_RETRY_DELAYS_MS = [350, 900]
+
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -21,6 +23,10 @@ function createTimeoutError(timeoutMs: number) {
 
 function isRetryableNetworkError(error: unknown) {
   return error instanceof TypeError && error.message.toLowerCase().includes('network request failed')
+}
+
+function isTimeoutError(error: unknown) {
+  return error instanceof Error && error.message.startsWith('Request timed out after ')
 }
 
 async function fetchWithOptionalTimeout(
@@ -84,7 +90,7 @@ async function apiRequest<T = any>(path: string, options: RequestOptions = {}): 
   }
 
   const url = `${API_BASE_URL}${path}`
-  const maxAttempts = method === 'GET' ? 2 : 1
+  const maxAttempts = method === 'GET' ? GET_RETRY_DELAYS_MS.length + 1 : 1
   let response: Response | null = null
   let lastError: unknown = null
 
@@ -104,11 +110,15 @@ async function apiRequest<T = any>(path: string, options: RequestOptions = {}): 
     } catch (error) {
       lastError = error
 
-      if (attempt >= maxAttempts || !isRetryableNetworkError(error)) {
+      const shouldRetry =
+        attempt < maxAttempts && (isRetryableNetworkError(error) || isTimeoutError(error))
+
+      if (!shouldRetry) {
         throw lastError
       }
 
-      await delay(250)
+      const retryDelay = GET_RETRY_DELAYS_MS[Math.min(attempt - 1, GET_RETRY_DELAYS_MS.length - 1)]
+      await delay(retryDelay)
     }
   }
 

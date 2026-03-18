@@ -36,6 +36,10 @@ const MOCK_PAYMENT_METHOD: PaymentMethodSummary = {
   message: 'Le backend de paiement est indisponible. Demarrez le serveur sur le port 3000 puis rafraichissez.'
 }
 
+const PROFILE_TIMEOUT_MS = 10000
+const PAYMENT_METHOD_TIMEOUT_MS = 10000
+const CHECKOUT_TIMEOUT_MS = 12000
+
 let fallbackProfileState: UserProfile = { ...MOCK_PROFILE }
 let fallbackPaymentState: PaymentMethodSummary = { ...MOCK_PAYMENT_METHOD }
 let profileRequest: Promise<UserProfile> | null = null
@@ -85,11 +89,11 @@ class ProfileService {
 
     profileRequest = (async () => {
       try {
-        const profile = await apiRequest<UserProfile>('/profile', { timeoutMs: 6000 })
+        const profile = await apiRequest<UserProfile>('/profile', { timeoutMs: PROFILE_TIMEOUT_MS })
         fallbackProfileState = cloneProfile(profile)
         return cloneProfile(profile)
       } catch (error) {
-        console.error('Error fetching profile:', error)
+        console.warn('Error fetching profile:', error)
         return this.getFallbackProfile()
       } finally {
         profileRequest = null
@@ -104,7 +108,7 @@ class ProfileService {
       const profile = await apiRequest<UserProfile>('/profile', {
         method: 'PUT',
         body: data,
-        timeoutMs: 6000
+        timeoutMs: PROFILE_TIMEOUT_MS
       })
       fallbackProfileState = cloneProfile(profile)
       return cloneProfile(profile)
@@ -126,7 +130,7 @@ class ProfileService {
     paymentMethodRequest = (async () => {
       try {
         const paymentMethod = await apiRequest<PaymentMethodSummary>('/profile/payment-method', {
-          timeoutMs: 6000
+          timeoutMs: PAYMENT_METHOD_TIMEOUT_MS
         })
         fallbackPaymentState = clonePayment({
           ...paymentMethod,
@@ -150,10 +154,10 @@ class ProfileService {
   }
 
   async createStripeCheckoutSession(): Promise<StripeCheckoutSessionResponse> {
-    const session = await apiRequest<StripeCheckoutSessionResponse>('/profile/payment-method/checkout-session', {
+      const session = await apiRequest<StripeCheckoutSessionResponse>('/profile/payment-method/checkout-session', {
       method: 'POST',
       body: {},
-      timeoutMs: 6000
+      timeoutMs: CHECKOUT_TIMEOUT_MS
     })
 
     fallbackPaymentState = {
@@ -174,7 +178,7 @@ class ProfileService {
         body: {
           sessionId: sessionId ?? fallbackPaymentState.lastCheckoutSessionId
         },
-        timeoutMs: 6000
+        timeoutMs: PAYMENT_METHOD_TIMEOUT_MS
       })
 
       fallbackPaymentState = clonePayment(paymentMethod)
