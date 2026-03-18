@@ -85,64 +85,84 @@ function buildReminderMessage(params: {
 }
 
 export async function getHomeFeed(req: Request, res: Response) {
-  const authenticatedUser = await resolveOptionalRequestUser(req);
-  const displayName = getFirstName(authenticatedUser?.fullName);
+  try {
+    const authenticatedUser = await resolveOptionalRequestUser(req);
+    const displayName = getFirstName(authenticatedUser?.fullName);
 
-  if (!authenticatedUser) {
-    res.json(buildDefaultFeed(displayName));
-    return;
-  }
-
-  const nextReservation = await prisma.reservation.findFirst({
-    where: {
-      userId: authenticatedUser.id,
-      status: {
-        in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED, ReservationStatus.PAID]
-      },
-      scheduledAt: {
-        gte: new Date()
-      }
-    },
-    orderBy: {
-      scheduledAt: 'asc'
+    if (!authenticatedUser) {
+      res.json(buildDefaultFeed(displayName));
+      return;
     }
-  });
 
-  const primaryVehicle = await prisma.vehicle.findFirst({
-    where: { userId: authenticatedUser.id },
-    orderBy: {
-      updatedAt: 'desc'
-    }
-  });
-
-  const nextReminder = primaryVehicle
-    ? await prisma.reminder.findFirst({
-        where: {
-          vehicleId: primaryVehicle.id
+    const nextReservation = await prisma.reservation.findFirst({
+      where: {
+        userId: authenticatedUser.id,
+        status: {
+          in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED, ReservationStatus.PAID]
         },
-        orderBy: {
-          dueAt: 'asc'
+        scheduledAt: {
+          gte: new Date()
         }
-      })
-    : null;
+      },
+      orderBy: {
+        scheduledAt: 'asc'
+      },
+      select: {
+        serviceType: true,
+        scheduledAt: true
+      }
+    });
 
-  const fallbackFeed = buildDefaultFeed(displayName);
-  const nextAppointmentLabel = nextReservation
-    ? `${capitalizeWords(nextReservation.serviceType)} le ${formatAppointmentDate(nextReservation.scheduledAt)}`
-    : fallbackFeed.nextAppointmentLabel;
+    const primaryVehicle = await prisma.vehicle.findFirst({
+      where: { userId: authenticatedUser.id },
+      orderBy: {
+        updatedAt: 'desc'
+      },
+      select: {
+        id: true,
+        name: true,
+        model: true,
+        mileage: true
+      }
+    });
 
-  const reminderMessage = buildReminderMessage({
-    reminderTitle: nextReminder?.title,
-    reminderDueAt: nextReminder?.dueAt,
-    vehicleName: primaryVehicle?.name,
-    vehicleModel: primaryVehicle?.model,
-    vehicleMileage: primaryVehicle?.mileage
-  });
+    const nextReminder = primaryVehicle
+      ? await prisma.reminder.findFirst({
+          where: {
+            vehicleId: primaryVehicle.id
+          },
+          orderBy: {
+            dueAt: 'asc'
+          },
+          select: {
+            title: true,
+            dueAt: true
+          }
+        })
+      : null;
 
-  res.json({
-    displayName,
-    nextAppointmentLabel,
-    promoMessage: DEFAULT_PROMO_MESSAGE,
-    reminderMessage
-  } satisfies HomeFeedPayload);
+    const fallbackFeed = buildDefaultFeed(displayName);
+    const nextAppointmentLabel = nextReservation
+      ? `${capitalizeWords(nextReservation.serviceType)} le ${formatAppointmentDate(nextReservation.scheduledAt)}`
+      : fallbackFeed.nextAppointmentLabel;
+
+    const reminderMessage = buildReminderMessage({
+      reminderTitle: nextReminder?.title,
+      reminderDueAt: nextReminder?.dueAt,
+      vehicleName: primaryVehicle?.name,
+      vehicleModel: primaryVehicle?.model,
+      vehicleMileage: primaryVehicle?.mileage
+    });
+
+    res.json({
+      displayName,
+      nextAppointmentLabel,
+      promoMessage: DEFAULT_PROMO_MESSAGE,
+      reminderMessage
+    } satisfies HomeFeedPayload);
+  } catch (error) {
+    console.error('Error building home feed:', error);
+    const displayName = getFirstName(undefined);
+    res.json(buildDefaultFeed(displayName));
+  }
 }
