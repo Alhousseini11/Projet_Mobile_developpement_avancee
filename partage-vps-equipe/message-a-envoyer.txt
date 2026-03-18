@@ -1,0 +1,21 @@
+Bonjour,
+
+Pour utiliser le backend deja deploye sur le VPS, utilisez cette URL :
+
+http://167.99.178.126:3000/api
+
+Important :
+- si vous utilisez cette URL, vous utilisez aussi la base de donnees du VPS
+- vous n'avez pas besoin de lancer votre backend local
+- vous pouvez travailler uniquement sur le frontend
+
+Verification dans le projet :
+- ouvrez `frontend/app/utils/api.ts`
+- verifiez que `API_BASE_URL` vaut `http://167.99.178.126:3000/api`
+
+Compte demo :
+- email : alex.martin@example.com
+- mot de passe : Garage123!
+
+Si vous voulez travailler avec votre propre base locale, il ne faut pas utiliser cette URL.
+Dans ce cas, chacun doit lancer son propre backend local.

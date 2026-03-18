@@ -15,8 +15,60 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+function createTimeoutError(timeoutMs: number) {
+  return new Error(`Request timed out after ${timeoutMs}ms`)
+}
+
 function isRetryableNetworkError(error: unknown) {
   return error instanceof TypeError && error.message.toLowerCase().includes('network request failed')
+}
+
+async function fetchWithOptionalTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs?: number
+): Promise<Response> {
+  if (!timeoutMs) {
+    return fetch(url, init)
+  }
+
+  if (typeof AbortController !== 'undefined') {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, timeoutMs)
+
+    try {
+      return await fetch(url, {
+        ...init,
+        signal: controller.signal
+      })
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw createTimeoutError(timeoutMs)
+      }
+      throw error
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  try {
+    return await Promise.race([
+      fetch(url, init),
+      new Promise<Response>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(createTimeoutError(timeoutMs))
+        }, timeoutMs)
+      })
+    ])
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+    }
+  }
 }
 
 async function apiRequest<T = any>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -37,38 +89,26 @@ async function apiRequest<T = any>(path: string, options: RequestOptions = {}): 
   let lastError: unknown = null
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const controller = timeoutMs ? new AbortController() : null
-    const timeoutId =
-      controller && timeoutMs
-        ? setTimeout(() => {
-            controller.abort()
-          }, timeoutMs)
-        : null
-
     try {
-      response = await fetch(url, {
+      response = await fetchWithOptionalTimeout(
+        url,
+        {
         method,
         headers: finalHeaders,
         body: body ? JSON.stringify(body) : undefined,
-        signal: controller?.signal,
         ...rest
-      })
+        },
+        timeoutMs
+      )
       break
     } catch (error) {
-      lastError =
-        controller?.signal.aborted && timeoutMs
-          ? new Error(`Request timed out after ${timeoutMs}ms`)
-          : error
+      lastError = error
 
       if (attempt >= maxAttempts || !isRetryableNetworkError(error)) {
         throw lastError
       }
 
       await delay(250)
-    } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-      }
     }
   }
 

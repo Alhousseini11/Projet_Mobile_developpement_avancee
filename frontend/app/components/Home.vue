@@ -18,9 +18,9 @@
               <Label text="🚗" class="hero-car" />
 
               <StackLayout class="hero-copy">
-                <Label :text="'Bonjour ' + userName + '!'" class="hero-title" />
+                <Label :text="'Bonjour ' + homeFeed.displayName + '!'" class="hero-title" />
                 <Label text="Prochain RDV:" class="hero-subtitle" />
-                <Label text="Lundi 12 Juillet a 10h" class="hero-appointment" />
+                <Label :text="homeFeed.nextAppointmentLabel" class="hero-appointment" textWrap="true" />
               </StackLayout>
             </GridLayout>
           </GridLayout>
@@ -43,12 +43,12 @@
 
           <GridLayout columns="40,*" class="banner promo-banner">
             <Label text="🎁" col="0" class="banner-icon" />
-            <Label text="Promos: 20% sur les freins!" col="1" class="banner-text" />
+            <Label :text="homeFeed.promoMessage" col="1" class="banner-text" textWrap="true" />
           </GridLayout>
 
           <GridLayout columns="40,*" class="banner reminder-banner">
             <Label text="⏰" col="0" class="banner-icon" />
-            <Label text="Rappel: Vidange a faire dans 500 km" col="1" class="banner-text dark" />
+            <Label :text="homeFeed.reminderMessage" col="1" class="banner-text dark" textWrap="true" />
           </GridLayout>
         </StackLayout>
       </ScrollView>
@@ -94,9 +94,11 @@
 </template>
 
 <script lang="ts" setup>
-import { computed } from 'nativescript-vue'
-import AuthService, { authState } from '@/services/AuthService'
+import { ref } from 'nativescript-vue'
+import AuthService from '@/services/AuthService'
+import HomeService from '@/services/HomeService'
 import { navigateToPage, type AppPage } from '@/utils/navigation'
+import type { HomeFeed } from '@/types/home'
 
 interface QuickAction {
   id: string
@@ -106,10 +108,7 @@ interface QuickAction {
   variant: 'primary' | 'dark'
 }
 
-const userName = computed(() => {
-  const fullName = authState.session?.user.fullName ?? 'Alex Martin'
-  return fullName.split(' ')[0] ?? 'Alex'
-})
+const homeFeed = ref<HomeFeed>(HomeService.getFallbackFeed())
 
 const quickActions: QuickAction[] = [
   {
@@ -135,12 +134,14 @@ const quickActions: QuickAction[] = [
   }
 ]
 
-function onPageLoaded() {
+async function onPageLoaded() {
   if (!AuthService.isAuthenticated()) {
     void navigateToPage('login', { clearHistory: true })
     return
   }
 
+  homeFeed.value = HomeService.getFallbackFeed()
+  homeFeed.value = await HomeService.getHomeFeed()
   console.log('Home page loaded')
 }
 
