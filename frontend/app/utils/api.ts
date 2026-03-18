@@ -1,6 +1,6 @@
 import { clearStoredSession, getStoredAccessToken } from '@/utils/authStorage'
 
-const API_BASE_URL = (global as any).isAndroid ? 'http://10.0.2.2:3000/api' : 'http://localhost:3000/api'
+const API_BASE_URL = 'http://167.99.178.126:3000/api'
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
