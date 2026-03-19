@@ -1,5 +1,9 @@
+import {
+  DEMO_ACCOUNT,
+  createDemoReservations,
+  getCurrentSessionFallbackKey
+} from '@/config/demo'
 import { apiRequest } from '@/utils/api'
-import { readStoredSession } from '@/utils/authStorage'
 import type {
   CreateReservationDTO,
   Reservation,
@@ -11,7 +15,6 @@ export type {
   Reservation,
   ReservationServiceOption
 } from '@/types/reservation'
-const DEMO_RESERVATION_EMAIL = 'alex.martin@example.com'
 
 const MOCK_SERVICES: ReservationServiceOption[] = [
   {
@@ -47,35 +50,12 @@ const MOCK_SLOT_BY_SERVICE: Record<string, string[]> = {
   diagnostic: ['09:30', '12:00', '15:30', '18:00']
 }
 
-const DEMO_RESERVATIONS: Reservation[] = []
-DEMO_RESERVATIONS.push(
-  {
-    id: 'reservation-1',
-    serviceId: 'oil-change',
-    serviceLabel: 'Vidange',
-    date: '2026-03-18',
-    time: '10:00',
-    status: 'confirmed',
-    createdAt: new Date('2026-03-10T09:00:00'),
-    updatedAt: new Date('2026-03-10T09:00:00')
-  },
-  {
-    id: 'reservation-2',
-    serviceId: 'diagnostic',
-    serviceLabel: 'Diagnostic',
-    date: '2026-03-22',
-    time: '15:30',
-    status: 'pending',
-    createdAt: new Date('2026-03-12T14:15:00'),
-    updatedAt: new Date('2026-03-12T14:15:00')
-  }
-)
-const fallbackReservationsByEmail = new Map<string, Reservation[]>()
+const fallbackReservationsByKey = new Map<string, Reservation[]>()
 
 const RESERVATION_READ_TIMEOUT_MS = 9000
 
 let reservationServicesRequest: Promise<ReservationServiceOption[]> | null = null
-let reservationsRequest: Promise<Reservation[]> | null = null
+let reservationsRequestByKey = new Map<string, Promise<Reservation[]>>()
 const slotsRequestByKey = new Map<string, Promise<string[]>>()
 
 function cloneService(service: ReservationServiceOption): ReservationServiceOption {
@@ -90,21 +70,16 @@ function cloneReservation(reservation: Reservation): Reservation {
   }
 }
 
-function getReservationFallbackKey(): string {
-  const email = readStoredSession()?.user.email?.trim().toLowerCase()
-  return email || DEMO_RESERVATION_EMAIL
-}
-
 function getFallbackReservationStore(): Reservation[] {
-  const key = getReservationFallbackKey()
-  const existing = fallbackReservationsByEmail.get(key)
+  const key = getCurrentSessionFallbackKey()
+  const existing = fallbackReservationsByKey.get(key)
   if (existing) {
     return existing
   }
 
   const initialReservations =
-    key === DEMO_RESERVATION_EMAIL ? DEMO_RESERVATIONS.map(cloneReservation) : []
-  fallbackReservationsByEmail.set(key, initialReservations)
+    key === DEMO_ACCOUNT.email ? createDemoReservations().map(cloneReservation) : []
+  fallbackReservationsByKey.set(key, initialReservations)
   return initialReservations
 }
 
@@ -181,25 +156,30 @@ class ReservationService {
   }
 
   async getMyReservations(): Promise<Reservation[]> {
-    if (reservationsRequest) {
-      return reservationsRequest.then(reservations => reservations.map(cloneReservation))
+    const key = getCurrentSessionFallbackKey()
+    const existingRequest = reservationsRequestByKey.get(key)
+    if (existingRequest) {
+      return existingRequest.then(reservations => reservations.map(cloneReservation))
     }
 
-    reservationsRequest = (async () => {
+    const request = (async () => {
       try {
         const reservations = await apiRequest<Reservation[]>('/reservations', {
           timeoutMs: RESERVATION_READ_TIMEOUT_MS
         })
-        return reservations.map(cloneReservation)
+        const normalizedReservations = reservations.map(cloneReservation)
+        fallbackReservationsByKey.set(key, normalizedReservations.map(cloneReservation))
+        return normalizedReservations
       } catch (error) {
         console.warn('Error fetching reservations:', error)
         return this.getFallbackReservations()
       } finally {
-        reservationsRequest = null
+        reservationsRequestByKey.delete(key)
       }
     })()
 
-    return reservationsRequest.then(reservations => reservations.map(cloneReservation))
+    reservationsRequestByKey.set(key, request)
+    return request.then(reservations => reservations.map(cloneReservation))
   }
 
   async createReservation(data: CreateReservationDTO): Promise<Reservation> {
@@ -209,21 +189,13 @@ class ReservationService {
         body: data
       })
 
-      return this.normalize(created)
+      const normalized = this.normalize(created)
+      const fallbackReservations = getFallbackReservationStore()
+      fallbackReservations.unshift(cloneReservation(normalized))
+      return normalized
     } catch (error) {
       console.error('Error creating reservation:', error)
-      const fallbackReservations = getFallbackReservationStore()
-
-      const reservation: Reservation = {
-        id: `reservation-${fallbackReservations.length + 1}`,
-        ...data,
-        status: 'confirmed',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-
-      fallbackReservations.unshift(reservation)
-      return reservation
+      throw error
     }
   }
 

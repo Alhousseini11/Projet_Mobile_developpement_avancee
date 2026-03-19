@@ -11,6 +11,20 @@ export function createHttpApp() {
   app.use(express.json());
   app.use(requestLogger);
 
+  app.get('/', (_req, res) => {
+    res.json({
+      ok: true,
+      service: 'garage-mechanic-backend'
+    });
+  });
+
+  app.get('/health', (_req, res) => {
+    res.json({
+      ok: true,
+      service: 'garage-mechanic-backend'
+    });
+  });
+
   registerRoutes(app);
 
   app.use(errorHandler);

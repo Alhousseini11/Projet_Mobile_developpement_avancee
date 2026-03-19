@@ -1,5 +1,6 @@
 import { Role } from '@prisma/client';
 import { Request, Response } from 'express';
+import { DEMO_ACCOUNT, isDemoUserEmail } from '../../config/demo';
 import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
@@ -69,9 +70,9 @@ interface InvoicePayload {
 
 const defaultProfileState: ProfilePayload = {
   id: 'demo-user',
-  fullName: 'Alex Martin',
-  email: 'alex.martin@example.com',
-  phone: '+1 514 555 0142',
+  fullName: DEMO_ACCOUNT.fullName,
+  email: DEMO_ACCOUNT.email,
+  phone: DEMO_ACCOUNT.phone,
   membershipLabel: 'Client premium',
   verified: true,
   memberSince: '2024-01-12',
@@ -150,7 +151,7 @@ function getUserInvoices(userId: string, email?: string | null) {
   }
 
   const initialInvoices =
-    email?.trim().toLowerCase() === defaultProfileState.email.toLowerCase()
+    isDemoUserEmail(email)
       ? demoInvoices.map(cloneInvoice)
       : [];
   invoiceStates.set(userId, initialInvoices);

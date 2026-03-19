@@ -2,6 +2,7 @@ import { ReservationStatus } from '@prisma/client';
 import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
+import { isSchemaDriftError } from '../_shared/isSchemaDriftError';
 import { resolveOptionalRequestUser } from '../auth/auth.service';
 
 interface HomeFeedPayload {
@@ -151,6 +152,11 @@ async function readPrimaryVehicle(userId: string): Promise<HomeVehicleRecord | n
       mileage: vehicle.mileage
     };
   } catch (currentSchemaError) {
+    if (!isSchemaDriftError(currentSchemaError)) {
+      logger.warn({ err: currentSchemaError, userId }, 'Unable to load vehicle context for home feed');
+      return null;
+    }
+
     logger.warn({ err: currentSchemaError, userId }, 'Falling back to legacy home vehicle schema');
 
     try {

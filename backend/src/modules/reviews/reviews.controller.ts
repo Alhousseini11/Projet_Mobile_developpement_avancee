@@ -1,8 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
+import { isDemoUserEmail, normalizeEmail } from '../../config/demo';
 import { findReservationForUser, listReservationsForUser } from '../reservations/reservations.controller';
-
-const DEMO_ACCOUNT_EMAIL = 'alex.martin@example.com';
 
 interface ReviewRecord {
   id: string;
@@ -21,15 +20,12 @@ const reviewsByUser = new Map<string, ReviewRecord[]>();
 function getAuthenticatedUser(res: Response) {
   return {
     userId: String(res.locals.authUser?.id ?? ''),
-    email:
-      typeof res.locals.authUser?.email === 'string'
-        ? res.locals.authUser.email.trim().toLowerCase()
-        : null
+    email: normalizeEmail(res.locals.authUser?.email)
   };
 }
 
 function createDemoReviews(userId: string, email?: string | null) {
-  if (email !== DEMO_ACCOUNT_EMAIL) {
+  if (!isDemoUserEmail(email)) {
     return [] as ReviewRecord[];
   }
 

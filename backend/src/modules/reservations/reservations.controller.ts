@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
+import { isDemoUserEmail, normalizeEmail } from '../../config/demo';
 import { createPlaceholderHandler } from '../_shared/createPlaceholderHandler';
 
 type ReservationStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
-const DEMO_ACCOUNT_EMAIL = 'alex.martin@example.com';
 
 interface ReservationServiceOption {
   id: string;
@@ -87,10 +87,7 @@ const reservationsByUser = new Map<string, ReservationRecord[]>();
 function getAuthenticatedUser(res: Response) {
   return {
     userId: String(res.locals.authUser?.id ?? ''),
-    email:
-      typeof res.locals.authUser?.email === 'string'
-        ? res.locals.authUser.email.trim().toLowerCase()
-        : null
+    email: normalizeEmail(res.locals.authUser?.email)
   };
 }
 
@@ -109,7 +106,7 @@ function getUserReservations(userId: string, email?: string | null) {
   }
 
   const initialReservations =
-    email === DEMO_ACCOUNT_EMAIL ? createDemoReservations(userId) : [];
+    isDemoUserEmail(email) ? createDemoReservations(userId) : [];
   reservationsByUser.set(userId, initialReservations);
   return initialReservations;
 }

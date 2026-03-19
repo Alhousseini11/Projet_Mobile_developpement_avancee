@@ -1,19 +1,17 @@
-/**
- * Vehicle Service
- * Handles all vehicle-related API calls and data management
- */
-
+import {
+  createDemoMaintenanceHistory,
+  createDemoVehicleDocuments,
+  createDemoVehicleInsurance,
+  createDemoVehicles,
+  isCurrentSessionDemoUser
+} from '@/config/demo'
 import {
   CreateVehicleDTO,
   MaintenanceRecord,
-  MaintenanceType,
   UpdateVehicleDTO,
   Vehicle,
   VehicleDocument,
-  VehicleInsurance,
-  VehicleType,
-  FuelType,
-  DocumentType
+  VehicleInsurance
 } from '@/types/vehicle'
 import { apiRequest } from '@/utils/api'
 
@@ -26,89 +24,21 @@ export type {
   VehicleInsurance
 } from '@/types/vehicle'
 
-const MOCK_USER_ID = 'demo-user'
-
-// Mock API responses for development
-const MOCK_VEHICLES: Vehicle[] = [
-  {
-    id: '1',
-    userId: MOCK_USER_ID,
-    name: 'Toyota Corolla',
-    model: 'Corolla 2018',
-    year: 2018,
-    mileage: 75000,
-    type: VehicleType.SEDAN,
-    licensePlate: 'AB-123-CD',
-    fuelType: FuelType.PETROL,
-    color: 'Gris',
-    createdAt: new Date('2023-01-15'),
-    updatedAt: new Date('2024-01-10')
-  },
-  {
-    id: '2',
-    userId: MOCK_USER_ID,
-    name: 'Renault Clio',
-    model: 'Clio 2020',
-    year: 2020,
-    mileage: 45000,
-    type: VehicleType.SEDAN,
-    licensePlate: 'EF-456-GH',
-    fuelType: FuelType.DIESEL,
-    color: 'Bleu',
-    createdAt: new Date('2023-06-20'),
-    updatedAt: new Date('2024-02-15')
-  }
-]
-
-const MOCK_MAINTENANCE_HISTORY: MaintenanceRecord[] = [
-  {
-    id: 'm-1',
-    vehicleId: '1',
-    type: MaintenanceType.OIL_CHANGE,
-    description: 'Vidange complete',
-    mileage: 70000,
-    cost: 89.9,
-    date: new Date('2024-01-05'),
-    nextMaintenanceKm: 80000,
-    createdAt: new Date('2024-01-05'),
-    updatedAt: new Date('2024-01-05')
-  }
-]
-
-const MOCK_DOCUMENTS: VehicleDocument[] = [
-  {
-    id: 'd-1',
-    vehicleId: '1',
-    type: DocumentType.REGISTRATION,
-    title: 'Carte grise',
-    fileUrl: 'https://example.com/documents/registration.pdf',
-    uploadedAt: new Date('2024-01-05'),
-    updatedAt: new Date('2024-01-05')
-  }
-]
-
-const MOCK_INSURANCE: VehicleInsurance[] = [
-  {
-    id: 'i-1',
-    vehicleId: '1',
-    provider: 'AssureAuto',
-    policyNumber: 'POL-12345',
-    startDate: new Date('2024-01-01'),
-    endDate: new Date('2024-12-31'),
-    coverage: 'Tous risques',
-    phoneNumber: '+33 1 23 45 67 89',
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-01-01')
-  }
-]
-
+const MOCK_VEHICLES: Vehicle[] = createDemoVehicles()
+const MOCK_MAINTENANCE_HISTORY: MaintenanceRecord[] = createDemoMaintenanceHistory()
+const MOCK_DOCUMENTS: VehicleDocument[] = createDemoVehicleDocuments()
+const MOCK_INSURANCE: VehicleInsurance[] = createDemoVehicleInsurance()
 const VEHICLE_READ_TIMEOUT_MS = 10000
 
 let vehiclesRequest: Promise<Vehicle[]> | null = null
 
 class VehicleService {
-  private apiBaseUrl = '' // handled by apiRequest
-  
+  private getFallbackVehicles() {
+    return isCurrentSessionDemoUser()
+      ? MOCK_VEHICLES.map(vehicle => this.normalizeVehicle(vehicle))
+      : []
+  }
+
   async getVehicles(): Promise<Vehicle[]> {
     if (vehiclesRequest) {
       return vehiclesRequest.then(vehicles => vehicles.map(vehicle => this.normalizeVehicle(vehicle)))
@@ -122,7 +52,7 @@ class VehicleService {
         return data.map(vehicle => this.normalizeVehicle(vehicle))
       } catch (error) {
         console.warn('Error fetching vehicles:', error)
-        return MOCK_VEHICLES.map(vehicle => this.normalizeVehicle(vehicle))
+        return this.getFallbackVehicles()
       } finally {
         vehiclesRequest = null
       }
@@ -139,8 +69,10 @@ class VehicleService {
       return this.normalizeVehicle(vehicle)
     } catch (error) {
       console.warn('Error fetching vehicle:', error)
-      const fallback = MOCK_VEHICLES.find(v => v.id === vehicleId)
-      if (fallback) return fallback
+      const fallback = this.getFallbackVehicles().find(v => v.id === vehicleId)
+      if (fallback) {
+        return fallback
+      }
       throw error
     }
   }
@@ -185,10 +117,15 @@ class VehicleService {
       const data = await apiRequest<MaintenanceRecord[]>(`/vehicles/${vehicleId}/maintenance`, {
         timeoutMs: VEHICLE_READ_TIMEOUT_MS
       })
-      return data
+      return data.map(record => this.normalizeMaintenanceRecord(record))
     } catch (error) {
       console.warn('Error fetching maintenance history:', error)
-      return MOCK_MAINTENANCE_HISTORY.filter(record => record.vehicleId === vehicleId)
+      if (!isCurrentSessionDemoUser()) {
+        return []
+      }
+      return MOCK_MAINTENANCE_HISTORY
+        .filter(record => record.vehicleId === vehicleId)
+        .map(record => this.normalizeMaintenanceRecord(record))
     }
   }
 
@@ -197,10 +134,15 @@ class VehicleService {
       const data = await apiRequest<VehicleDocument[]>(`/vehicles/${vehicleId}/documents`, {
         timeoutMs: VEHICLE_READ_TIMEOUT_MS
       })
-      return data
+      return data.map(document => this.normalizeVehicleDocument(document))
     } catch (error) {
       console.warn('Error fetching documents:', error)
-      return MOCK_DOCUMENTS.filter(document => document.vehicleId === vehicleId)
+      if (!isCurrentSessionDemoUser()) {
+        return []
+      }
+      return MOCK_DOCUMENTS
+        .filter(document => document.vehicleId === vehicleId)
+        .map(document => this.normalizeVehicleDocument(document))
     }
   }
 
@@ -209,16 +151,15 @@ class VehicleService {
       const data = await apiRequest<VehicleInsurance>(`/vehicles/${vehicleId}/insurance`, {
         timeoutMs: VEHICLE_READ_TIMEOUT_MS
       })
-      return data ? { ...data, startDate: new Date(data.startDate), endDate: new Date(data.endDate) } : null
+      return data ? this.normalizeVehicleInsurance(data) : null
     } catch (error) {
       console.warn('Error fetching vehicle insurance:', error)
+      if (!isCurrentSessionDemoUser()) {
+        return null
+      }
       const insurance = MOCK_INSURANCE.find(item => item.vehicleId === vehicleId) ?? null
-      return insurance
+      return insurance ? this.normalizeVehicleInsurance(insurance) : null
     }
-  }
-
-  private getAuthToken(): string {
-    return 'mock-token'
   }
 
   private normalizeVehicle(vehicle: Vehicle): Vehicle {
@@ -226,6 +167,33 @@ class VehicleService {
       ...vehicle,
       createdAt: new Date(vehicle.createdAt),
       updatedAt: new Date(vehicle.updatedAt)
+    }
+  }
+
+  private normalizeMaintenanceRecord(record: MaintenanceRecord): MaintenanceRecord {
+    return {
+      ...record,
+      date: new Date(record.date),
+      createdAt: new Date(record.createdAt),
+      updatedAt: new Date(record.updatedAt)
+    }
+  }
+
+  private normalizeVehicleDocument(document: VehicleDocument): VehicleDocument {
+    return {
+      ...document,
+      uploadedAt: new Date(document.uploadedAt),
+      updatedAt: new Date(document.updatedAt)
+    }
+  }
+
+  private normalizeVehicleInsurance(insurance: VehicleInsurance): VehicleInsurance {
+    return {
+      ...insurance,
+      startDate: new Date(insurance.startDate),
+      endDate: new Date(insurance.endDate),
+      createdAt: new Date(insurance.createdAt),
+      updatedAt: new Date(insurance.updatedAt)
     }
   }
 }

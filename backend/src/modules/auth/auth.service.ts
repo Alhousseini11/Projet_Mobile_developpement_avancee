@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import type { Request } from 'express';
 import { Role, type User } from '@prisma/client';
+import { DEMO_ACCOUNT, isDemoModeEnabled } from '../../config/demo';
 import { env } from '../../config/env';
 import { prisma } from '../../data/prisma/client';
 import { AppError } from '../../shared/errors';
@@ -8,13 +9,6 @@ import { AppError } from '../../shared/errors';
 const ACCESS_TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
 const REFRESH_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const PASSWORD_RESET_TTL_MS = 1000 * 60 * 30;
-
-const DEMO_ACCOUNT = {
-  email: 'alex.martin@example.com',
-  password: 'Garage123!',
-  fullName: 'Alex Martin',
-  phone: '+1 514 555 0142'
-};
 
 type TokenType = 'access' | 'refresh' | 'password-reset';
 
@@ -204,6 +198,10 @@ function createSession(user: AuthenticatedUser): AuthSessionPayload {
 }
 
 export async function ensureDemoUserExists() {
+  if (!isDemoModeEnabled()) {
+    return null;
+  }
+
   const existing = await prisma.user.findUnique({
     where: { email: DEMO_ACCOUNT.email }
   });

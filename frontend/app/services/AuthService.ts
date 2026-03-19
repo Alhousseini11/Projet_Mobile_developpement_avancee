@@ -1,4 +1,5 @@
 import { reactive } from 'nativescript-vue'
+import { DEMO_ACCOUNT } from '@/config/demo'
 import { apiRequest } from '@/utils/api'
 import { clearStoredSession, readStoredSession, writeStoredSession } from '@/utils/authStorage'
 import type {
@@ -9,9 +10,6 @@ import type {
   RegisterCredentials,
   ResetPasswordPayload
 } from '@/types/auth'
-
-const DEMO_EMAIL = 'alex.martin@example.com'
-const DEMO_PASSWORD = 'Garage123!'
 
 export const authState = reactive<AuthState>({
   initialized: false,
@@ -135,8 +133,8 @@ class AuthService {
 
   getDemoCredentials() {
     return {
-      email: DEMO_EMAIL,
-      password: DEMO_PASSWORD
+      email: DEMO_ACCOUNT.email,
+      password: DEMO_ACCOUNT.password
     }
   }
 

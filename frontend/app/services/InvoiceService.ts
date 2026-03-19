@@ -1,47 +1,24 @@
+import { DEMO_ACCOUNT, createDemoInvoices, getCurrentSessionFallbackKey } from '@/config/demo'
 import { API_BASE_URL, apiRequest } from '@/utils/api'
-import { readStoredSession } from '@/utils/authStorage'
 import type { InvoiceSummary } from '@/types/invoice'
 
-const DEMO_INVOICE_EMAIL = 'alex.martin@example.com'
-const MOCK_INVOICES: InvoiceSummary[] = [
-  {
-    id: 'invoice-1001',
-    number: 'INV-2026-001',
-    serviceLabel: 'Vidange',
-    issuedAt: '2026-03-10',
-    appointmentDate: '2026-03-18',
-    totalAmount: 90.86,
-    taxAmount: 11.86,
-    currency: 'CAD',
-    status: 'paid'
-  },
-  {
-    id: 'invoice-1002',
-    number: 'INV-2026-002',
-    serviceLabel: 'Diagnostic',
-    issuedAt: '2026-03-12',
-    appointmentDate: '2026-03-22',
-    totalAmount: 67.84,
-    taxAmount: 8.84,
-    currency: 'CAD',
-    status: 'pending'
-  }
-]
-const fallbackInvoicesByEmail = new Map<string, InvoiceSummary[]>()
+const INVOICE_READ_TIMEOUT_MS = 8000
+const fallbackInvoicesByKey = new Map<string, InvoiceSummary[]>()
 
-function getInvoiceFallbackKey() {
-  return readStoredSession()?.user.email?.trim().toLowerCase() || DEMO_INVOICE_EMAIL
+function cloneInvoice(invoice: InvoiceSummary): InvoiceSummary {
+  return { ...invoice }
 }
 
 function getFallbackInvoiceStore() {
-  const key = getInvoiceFallbackKey()
-  const existing = fallbackInvoicesByEmail.get(key)
+  const key = getCurrentSessionFallbackKey()
+  const existing = fallbackInvoicesByKey.get(key)
   if (existing) {
     return existing
   }
 
-  const initialInvoices = key === DEMO_INVOICE_EMAIL ? MOCK_INVOICES.map(invoice => ({ ...invoice })) : []
-  fallbackInvoicesByEmail.set(key, initialInvoices)
+  const initialInvoices =
+    key === DEMO_ACCOUNT.email ? createDemoInvoices().map(cloneInvoice) : []
+  fallbackInvoicesByKey.set(key, initialInvoices)
   return initialInvoices
 }
 
@@ -65,17 +42,16 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 
 class InvoiceService {
   getFallbackInvoices(): InvoiceSummary[] {
-    return getFallbackInvoiceStore().map(invoice => ({ ...invoice }))
+    return getFallbackInvoiceStore().map(cloneInvoice)
   }
 
   async getInvoices(): Promise<InvoiceSummary[]> {
+    const key = getCurrentSessionFallbackKey()
+
     try {
-      const invoices = await withTimeout(apiRequest<InvoiceSummary[]>('/profile/invoices'), 1500)
-      fallbackInvoicesByEmail.set(
-        getInvoiceFallbackKey(),
-        invoices.map(invoice => ({ ...invoice }))
-      )
-      return invoices.map(invoice => ({ ...invoice }))
+      const invoices = await withTimeout(apiRequest<InvoiceSummary[]>('/profile/invoices'), INVOICE_READ_TIMEOUT_MS)
+      fallbackInvoicesByKey.set(key, invoices.map(cloneInvoice))
+      return invoices.map(cloneInvoice)
     } catch (error) {
       console.error('Error fetching invoices:', error)
       return this.getFallbackInvoices()

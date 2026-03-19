@@ -47,7 +47,7 @@
               <Label text="Adresse email" class="field-label" />
               <TextField
                 v-model="email"
-                hint="alex.martin@example.com"
+                :hint="demoCredentials.email"
                 keyboardType="email"
                 autocorrect="false"
                 autocapitalizationType="none"
@@ -117,8 +117,8 @@
 
           <StackLayout class="credentials-card">
             <Label text="Compte demo backend" class="credentials-title" />
-            <Label text="Email: alex.martin@example.com" class="credentials-copy" />
-            <Label text="Mot de passe: Garage123!" class="credentials-copy" />
+            <Label :text="'Email: ' + demoCredentials.email" class="credentials-copy" />
+            <Label :text="'Mot de passe: ' + demoCredentials.password" class="credentials-copy" />
           </StackLayout>
         </StackLayout>
       </ScrollView>

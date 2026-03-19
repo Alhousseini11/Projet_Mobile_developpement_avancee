@@ -1,3 +1,9 @@
+import {
+  createDemoProfile,
+  createUnavailablePaymentMethod,
+  getCurrentSessionFallbackKey,
+  isDemoUserEmail
+} from '@/config/demo'
 import { apiRequest } from '@/utils/api'
 import { readStoredSession } from '@/utils/authStorage'
 import ReservationService from '@/services/ReservationService'
@@ -7,59 +13,14 @@ import type {
   UserProfile
 } from '@/types/profile'
 
-const MOCK_PROFILE: UserProfile = {
-  id: 'demo-user',
-  fullName: 'Alex Martin',
-  email: 'alex.martin@example.com',
-  phone: '+1 514 555 0142',
-  membershipLabel: 'Client premium',
-  verified: true,
-  memberSince: '2024-01-12',
-  preferredGarage: 'Garage Montreal Centre',
-  defaultVehicleLabel: 'Peugeot 208 GT',
-  appointmentCount: 2,
-  vehicleCount: 1,
-  loyaltyPoints: 240,
-  addressLine: '245 Rue du Centre',
-  city: 'Montreal, QC',
-  notes: 'Preference pour les interventions en semaine le matin.'
-}
-
-const MOCK_PAYMENT_METHOD: PaymentMethodSummary = {
-  provider: 'stripe',
-  status: 'not_configured',
-  backendReachable: false,
-  stripeConfigured: false,
-  customerId: null,
-  card: null,
-  lastCheckoutSessionId: null,
-  lastSyncAt: null,
-  message: 'Le backend de paiement est indisponible. Demarrez le serveur sur le port 3000 puis rafraichissez.'
-}
-
 const PROFILE_TIMEOUT_MS = 10000
 const PAYMENT_METHOD_TIMEOUT_MS = 10000
 const CHECKOUT_TIMEOUT_MS = 12000
 
-let fallbackProfileState: UserProfile = { ...MOCK_PROFILE }
-let fallbackPaymentState: PaymentMethodSummary = { ...MOCK_PAYMENT_METHOD }
-let profileRequest: Promise<UserProfile> | null = null
-let paymentMethodRequest: Promise<PaymentMethodSummary> | null = null
-
-function syncFallbackProfileIdentity() {
-  const session = readStoredSession()
-  if (!session) {
-    return
-  }
-
-  fallbackProfileState = {
-    ...fallbackProfileState,
-    id: session.user.id,
-    fullName: session.user.fullName,
-    email: session.user.email,
-    phone: session.user.phone ?? fallbackProfileState.phone
-  }
-}
+const fallbackProfilesByKey = new Map<string, UserProfile>()
+const fallbackPaymentsByKey = new Map<string, PaymentMethodSummary>()
+const profileRequestsByKey = new Map<string, Promise<UserProfile>>()
+const paymentMethodRequestsByKey = new Map<string, Promise<PaymentMethodSummary>>()
 
 function cloneProfile(profile: UserProfile): UserProfile {
   return { ...profile }
@@ -70,6 +31,74 @@ function clonePayment(payment: PaymentMethodSummary): PaymentMethodSummary {
     ...payment,
     card: payment.card ? { ...payment.card } : null
   }
+}
+
+function createFallbackProfileForCurrentSession(): UserProfile {
+  const session = readStoredSession()
+  const demoProfile = createDemoProfile()
+
+  if (!session) {
+    return demoProfile
+  }
+
+  const isDemoUser = isDemoUserEmail(session.user.email)
+
+  return {
+    ...demoProfile,
+    id: session.user.id,
+    fullName: session.user.fullName,
+    email: session.user.email,
+    phone: session.user.phone ?? demoProfile.phone,
+    membershipLabel: isDemoUser ? demoProfile.membershipLabel : 'Client',
+    verified: isDemoUser ? demoProfile.verified : true,
+    memberSince: isDemoUser ? demoProfile.memberSince : new Date().toISOString().slice(0, 10),
+    preferredGarage: isDemoUser ? demoProfile.preferredGarage : 'Garage Montreal Centre',
+    defaultVehicleLabel: isDemoUser ? demoProfile.defaultVehicleLabel : 'Aucun vehicule',
+    appointmentCount: isDemoUser ? demoProfile.appointmentCount : 0,
+    vehicleCount: isDemoUser ? demoProfile.vehicleCount : 0,
+    loyaltyPoints: isDemoUser ? demoProfile.loyaltyPoints : 0,
+    addressLine: isDemoUser ? demoProfile.addressLine : 'Adresse a completer',
+    city: isDemoUser ? demoProfile.city : 'Montreal, QC',
+    notes: isDemoUser ? demoProfile.notes : 'Compte client connecte via authentification backend.'
+  }
+}
+
+function getFallbackProfileStore() {
+  const key = getCurrentSessionFallbackKey()
+  const existing = fallbackProfilesByKey.get(key)
+
+  if (existing) {
+    const session = readStoredSession()
+    if (!session) {
+      return existing
+    }
+
+    const synchronized = {
+      ...existing,
+      id: session.user.id,
+      fullName: session.user.fullName,
+      email: session.user.email,
+      phone: session.user.phone ?? existing.phone
+    }
+    fallbackProfilesByKey.set(key, synchronized)
+    return synchronized
+  }
+
+  const initialProfile = createFallbackProfileForCurrentSession()
+  fallbackProfilesByKey.set(key, initialProfile)
+  return initialProfile
+}
+
+function getFallbackPaymentStore() {
+  const key = getCurrentSessionFallbackKey()
+  const existing = fallbackPaymentsByKey.get(key)
+  if (existing) {
+    return existing
+  }
+
+  const initialPayment = createUnavailablePaymentMethod()
+  fallbackPaymentsByKey.set(key, initialPayment)
+  return initialPayment
 }
 
 async function syncAppointmentCount(profile: UserProfile): Promise<UserProfile> {
@@ -95,125 +124,137 @@ async function syncAppointmentCount(profile: UserProfile): Promise<UserProfile> 
 
 class ProfileService {
   getFallbackProfile(): UserProfile {
-    syncFallbackProfileIdentity()
-    return cloneProfile(fallbackProfileState)
+    return cloneProfile(getFallbackProfileStore())
   }
 
   getFallbackPaymentMethod(): PaymentMethodSummary {
-    return clonePayment(fallbackPaymentState)
+    return clonePayment(getFallbackPaymentStore())
   }
 
   async getProfile(): Promise<UserProfile> {
-    syncFallbackProfileIdentity()
-    if (profileRequest) {
-      return profileRequest.then(cloneProfile)
+    const key = getCurrentSessionFallbackKey()
+    const existingRequest = profileRequestsByKey.get(key)
+    if (existingRequest) {
+      return existingRequest.then(cloneProfile)
     }
 
-    profileRequest = (async () => {
+    const request = (async () => {
       try {
         const profile = await apiRequest<UserProfile>('/profile', { timeoutMs: PROFILE_TIMEOUT_MS })
         const synchronizedProfile = await syncAppointmentCount(profile)
-        fallbackProfileState = cloneProfile(synchronizedProfile)
+        fallbackProfilesByKey.set(key, cloneProfile(synchronizedProfile))
         return cloneProfile(synchronizedProfile)
       } catch (error) {
         console.warn('Error fetching profile:', error)
         return this.getFallbackProfile()
       } finally {
-        profileRequest = null
+        profileRequestsByKey.delete(key)
       }
     })()
 
-    return profileRequest.then(cloneProfile)
+    profileRequestsByKey.set(key, request)
+    return request.then(cloneProfile)
   }
 
   async updateProfile(data: Partial<UserProfile>): Promise<UserProfile> {
+    const key = getCurrentSessionFallbackKey()
+
     try {
       const profile = await apiRequest<UserProfile>('/profile', {
         method: 'PUT',
         body: data,
         timeoutMs: PROFILE_TIMEOUT_MS
       })
-      fallbackProfileState = cloneProfile(profile)
+      fallbackProfilesByKey.set(key, cloneProfile(profile))
       return cloneProfile(profile)
     } catch (error) {
       console.error('Error updating profile:', error)
-      fallbackProfileState = {
-        ...fallbackProfileState,
-        ...data
-      }
-      return this.getFallbackProfile()
+      throw error
     }
   }
 
   async getPaymentMethod(): Promise<PaymentMethodSummary> {
-    if (paymentMethodRequest) {
-      return paymentMethodRequest.then(clonePayment)
+    const key = getCurrentSessionFallbackKey()
+    const existingRequest = paymentMethodRequestsByKey.get(key)
+    if (existingRequest) {
+      return existingRequest.then(clonePayment)
     }
 
-    paymentMethodRequest = (async () => {
+    const request = (async () => {
       try {
         const paymentMethod = await apiRequest<PaymentMethodSummary>('/profile/payment-method', {
           timeoutMs: PAYMENT_METHOD_TIMEOUT_MS
         })
-        fallbackPaymentState = clonePayment({
+        const synchronizedPayment = clonePayment({
           ...paymentMethod,
           backendReachable: true
         })
-        return clonePayment(fallbackPaymentState)
+        fallbackPaymentsByKey.set(key, synchronizedPayment)
+        return clonePayment(synchronizedPayment)
       } catch (error) {
         console.error('Error fetching payment method:', error)
-        fallbackPaymentState = {
-          ...fallbackPaymentState,
+        const fallbackPayment = {
+          ...getFallbackPaymentStore(),
           backendReachable: false,
           message: 'Le backend de paiement est indisponible. Demarrez le serveur sur le port 3000 puis rafraichissez.'
         }
-        return this.getFallbackPaymentMethod()
+        fallbackPaymentsByKey.set(key, fallbackPayment)
+        return clonePayment(fallbackPayment)
       } finally {
-        paymentMethodRequest = null
+        paymentMethodRequestsByKey.delete(key)
       }
     })()
 
-    return paymentMethodRequest.then(clonePayment)
+    paymentMethodRequestsByKey.set(key, request)
+    return request.then(clonePayment)
   }
 
   async createStripeCheckoutSession(): Promise<StripeCheckoutSessionResponse> {
-      const session = await apiRequest<StripeCheckoutSessionResponse>('/profile/payment-method/checkout-session', {
-      method: 'POST',
-      body: {},
-      timeoutMs: CHECKOUT_TIMEOUT_MS
-    })
+    const key = getCurrentSessionFallbackKey()
+    const session = await apiRequest<StripeCheckoutSessionResponse>(
+      '/profile/payment-method/checkout-session',
+      {
+        method: 'POST',
+        body: {},
+        timeoutMs: CHECKOUT_TIMEOUT_MS
+      }
+    )
 
-    fallbackPaymentState = {
-      ...fallbackPaymentState,
+    fallbackPaymentsByKey.set(key, {
+      ...getFallbackPaymentStore(),
       backendReachable: true,
       status: 'pending',
       lastCheckoutSessionId: session.sessionId,
       message: 'Session Stripe ouverte. Revenez ensuite synchroniser le moyen de paiement.'
-    }
+    })
 
     return session
   }
 
   async syncStripePaymentMethod(sessionId?: string): Promise<PaymentMethodSummary> {
+    const key = getCurrentSessionFallbackKey()
+    const currentFallback = getFallbackPaymentStore()
+
     try {
       const paymentMethod = await apiRequest<PaymentMethodSummary>('/profile/payment-method/sync', {
         method: 'POST',
         body: {
-          sessionId: sessionId ?? fallbackPaymentState.lastCheckoutSessionId
+          sessionId: sessionId ?? currentFallback.lastCheckoutSessionId
         },
         timeoutMs: PAYMENT_METHOD_TIMEOUT_MS
       })
 
-      fallbackPaymentState = clonePayment(paymentMethod)
+      fallbackPaymentsByKey.set(key, clonePayment(paymentMethod))
       return clonePayment(paymentMethod)
     } catch (error) {
       console.error('Error syncing Stripe payment method:', error)
-      fallbackPaymentState = {
-        ...fallbackPaymentState,
+      const fallbackPayment = {
+        ...currentFallback,
         backendReachable: false,
         message: 'Le backend de paiement est indisponible. Demarrez le serveur sur le port 3000 puis rafraichissez.'
       }
-      return this.getFallbackPaymentMethod()
+      fallbackPaymentsByKey.set(key, fallbackPayment)
+      return clonePayment(fallbackPayment)
     }
   }
 }

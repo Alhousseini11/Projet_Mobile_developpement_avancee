@@ -1,28 +1,13 @@
-import { readStoredSession } from '@/utils/authStorage'
+import {
+  DEMO_ACCOUNT,
+  createDemoReviews,
+  getCurrentSessionFallbackKey
+} from '@/config/demo'
 import { apiRequest } from '@/utils/api'
 import type { CreateReviewDTO, Review } from '@/types/review'
 
-const DEMO_REVIEW_EMAIL = 'alex.martin@example.com'
-
-const DEMO_REVIEWS: Review[] = [
-  {
-    id: 'review-1',
-    reservationId: 'reservation-1',
-    reservationLabel: 'Vidange',
-    appointmentDate: '2026-03-18',
-    rating: 5,
-    comment: 'Service rapide, accueil rassurant et explications claires.',
-    createdAt: new Date('2026-03-11T10:00:00'),
-    updatedAt: new Date('2026-03-11T10:00:00')
-  }
-]
-
 const REVIEWS_TIMEOUT_MS = 8000
-const fallbackReviewsByEmail = new Map<string, Review[]>()
-
-function getReviewFallbackKey() {
-  return readStoredSession()?.user.email?.trim().toLowerCase() || DEMO_REVIEW_EMAIL
-}
+const fallbackReviewsByKey = new Map<string, Review[]>()
 
 function cloneReview(review: Review): Review {
   return {
@@ -33,14 +18,15 @@ function cloneReview(review: Review): Review {
 }
 
 function getFallbackReviewStore() {
-  const key = getReviewFallbackKey()
-  const existing = fallbackReviewsByEmail.get(key)
+  const key = getCurrentSessionFallbackKey()
+  const existing = fallbackReviewsByKey.get(key)
   if (existing) {
     return existing
   }
 
-  const initialReviews = key === DEMO_REVIEW_EMAIL ? DEMO_REVIEWS.map(cloneReview) : []
-  fallbackReviewsByEmail.set(key, initialReviews)
+  const initialReviews =
+    key === DEMO_ACCOUNT.email ? createDemoReviews().map(cloneReview) : []
+  fallbackReviewsByKey.set(key, initialReviews)
   return initialReviews
 }
 
@@ -58,12 +44,14 @@ class ReviewService {
   }
 
   async getReviews(): Promise<Review[]> {
+    const key = getCurrentSessionFallbackKey()
+
     try {
       const reviews = await apiRequest<Array<Omit<Review, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>>('/reviews', {
         timeoutMs: REVIEWS_TIMEOUT_MS
       })
       const normalized = reviews.map(normalizeReview)
-      fallbackReviewsByEmail.set(getReviewFallbackKey(), normalized.map(cloneReview))
+      fallbackReviewsByKey.set(key, normalized.map(cloneReview))
       return normalized.map(cloneReview)
     } catch (error) {
       console.error('Error fetching reviews:', error)
@@ -92,27 +80,7 @@ class ReviewService {
       return cloneReview(normalized)
     } catch (error) {
       console.error('Error saving review:', error)
-      const fallbackReviews = getFallbackReviewStore()
-      const now = new Date()
-      const existingIndex = fallbackReviews.findIndex(item => item.reservationId === data.reservationId)
-      const fallbackReview: Review = {
-        id: existingIndex >= 0 ? fallbackReviews[existingIndex].id : `review-${fallbackReviews.length + 1}`,
-        reservationId: data.reservationId,
-        reservationLabel: 'Rendez-vous',
-        appointmentDate: now.toISOString().slice(0, 10),
-        rating: data.rating,
-        comment: data.comment?.trim() || null,
-        createdAt: existingIndex >= 0 ? fallbackReviews[existingIndex].createdAt : now,
-        updatedAt: now
-      }
-
-      if (existingIndex >= 0) {
-        fallbackReviews.splice(existingIndex, 1, cloneReview(fallbackReview))
-      } else {
-        fallbackReviews.unshift(cloneReview(fallbackReview))
-      }
-
-      return cloneReview(fallbackReview)
+      throw error
     }
   }
 }

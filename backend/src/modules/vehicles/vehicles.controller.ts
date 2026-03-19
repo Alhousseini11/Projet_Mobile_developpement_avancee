@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
+import { isSchemaDriftError } from '../_shared/isSchemaDriftError';
 
 interface VehicleResponse {
   id: string;
@@ -208,6 +209,11 @@ async function readVehicleCatalog(userId: string) {
   try {
     return await readCurrentVehicles(userId);
   } catch (currentSchemaError) {
+    if (!isSchemaDriftError(currentSchemaError)) {
+      logger.error({ err: currentSchemaError, userId }, 'Unable to read vehicles from current schema');
+      return [];
+    }
+
     logger.warn({ err: currentSchemaError, userId }, 'Falling back to legacy vehicle schema');
 
     try {
@@ -357,6 +363,12 @@ export async function createVehicle(req: Request, res: Response) {
   try {
     res.status(201).json(await createCurrentVehicle(userId, payload));
   } catch (currentSchemaError) {
+    if (!isSchemaDriftError(currentSchemaError)) {
+      logger.error({ err: currentSchemaError, userId }, 'Error creating vehicle in current schema');
+      res.status(503).json({ message: 'Vehicle write operations are not available on this deployment.' });
+      return;
+    }
+
     logger.warn({ err: currentSchemaError, userId }, 'Falling back to legacy vehicle create');
 
     try {
@@ -398,6 +410,15 @@ export async function updateVehicle(req: Request, res: Response) {
 
     res.json(await updateCurrentVehicle(id, payload));
   } catch (currentSchemaError) {
+    if (!isSchemaDriftError(currentSchemaError)) {
+      logger.error(
+        { err: currentSchemaError, userId, vehicleId: id },
+        'Error updating vehicle in current schema'
+      );
+      res.status(503).json({ message: 'Vehicle write operations are not available on this deployment.' });
+      return;
+    }
+
     logger.warn(
       { err: currentSchemaError, userId, vehicleId: id },
       'Falling back to legacy vehicle update'
@@ -429,6 +450,15 @@ export async function deleteVehicle(req: Request, res: Response) {
     await prisma.vehicle.delete({ where: { id } });
     res.status(204).end();
   } catch (currentSchemaError) {
+    if (!isSchemaDriftError(currentSchemaError)) {
+      logger.error(
+        { err: currentSchemaError, userId, vehicleId: id },
+        'Error deleting vehicle in current schema'
+      );
+      res.status(503).json({ message: 'Vehicle delete is not available on this deployment.' });
+      return;
+    }
+
     logger.warn(
       { err: currentSchemaError, userId, vehicleId: id },
       'Falling back to legacy vehicle delete'

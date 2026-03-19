@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
+import { isSchemaDriftError } from '../_shared/isSchemaDriftError';
 
 type TutorialCategory =
   | 'entretien'
@@ -259,6 +260,11 @@ async function readTutorialCatalog() {
   try {
     return await readCurrentTutorials();
   } catch (currentSchemaError) {
+    if (!isSchemaDriftError(currentSchemaError)) {
+      logger.error({ err: currentSchemaError }, 'Unable to read tutorials from current schema');
+      return FALLBACK_TUTORIALS.map(cloneTutorial);
+    }
+
     logger.warn({ err: currentSchemaError }, 'Falling back to legacy tutorial schema');
 
     try {

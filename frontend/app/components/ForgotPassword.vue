@@ -34,7 +34,7 @@
               <Label text="Adresse email" class="field-label" />
               <TextField
                 v-model="email"
-                hint="alex.martin@example.com"
+                :hint="demoCredentials.email"
                 keyboardType="email"
                 autocorrect="false"
                 autocapitalizationType="none"
