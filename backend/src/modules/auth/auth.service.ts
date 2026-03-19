@@ -278,7 +278,7 @@ export async function refreshAuthSession(refreshToken: string) {
     where: { id: payload.sub }
   });
 
-  if (!user || user.email !== payload.email) {
+  if (!user) {
     throw new AppError('Session introuvable.', 401);
   }
 
@@ -358,7 +358,7 @@ export async function resolveUserFromAccessToken(accessToken: string) {
     where: { id: payload.sub }
   });
 
-  if (!user || user.email !== payload.email) {
+  if (!user) {
     throw new AppError('Session invalide.', 401);
   }
 

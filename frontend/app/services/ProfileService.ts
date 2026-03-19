@@ -4,6 +4,7 @@ import {
   getCurrentSessionFallbackKey,
   isDemoUserEmail
 } from '@/config/demo'
+import AuthService from '@/services/AuthService'
 import { apiRequest } from '@/utils/api'
 import { readStoredSession } from '@/utils/authStorage'
 import ReservationService from '@/services/ReservationService'
@@ -157,7 +158,7 @@ class ProfileService {
   }
 
   async updateProfile(data: Partial<UserProfile>): Promise<UserProfile> {
-    const key = getCurrentSessionFallbackKey()
+    const previousKey = getCurrentSessionFallbackKey()
 
     try {
       const profile = await apiRequest<UserProfile>('/profile', {
@@ -165,7 +166,15 @@ class ProfileService {
         body: data,
         timeoutMs: PROFILE_TIMEOUT_MS
       })
-      fallbackProfilesByKey.set(key, cloneProfile(profile))
+      AuthService.syncSessionUser({
+        id: profile.id,
+        fullName: profile.fullName,
+        email: profile.email,
+        phone: profile.phone
+      })
+      const nextKey = getCurrentSessionFallbackKey()
+      fallbackProfilesByKey.delete(previousKey)
+      fallbackProfilesByKey.set(nextKey, cloneProfile(profile))
       return cloneProfile(profile)
     } catch (error) {
       console.error('Error updating profile:', error)

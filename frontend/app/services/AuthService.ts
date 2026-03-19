@@ -1,7 +1,7 @@
 import { reactive } from 'nativescript-vue'
 import { DEMO_ACCOUNT } from '@/config/demo'
 import { apiRequest } from '@/utils/api'
-import { clearStoredSession, readStoredSession, writeStoredSession } from '@/utils/authStorage'
+import { clearStoredSession, patchStoredSessionUser, readStoredSession, writeStoredSession } from '@/utils/authStorage'
 import type {
   AuthSession,
   AuthState,
@@ -231,6 +231,16 @@ class AuthService {
   logout() {
     clearAuthState()
     clearStoredSession()
+  }
+
+  syncSessionUser(userPatch: Partial<AuthSession['user']>) {
+    const nextSession = patchStoredSessionUser(userPatch)
+    if (!nextSession || !authState.session) {
+      return cloneSession(nextSession)
+    }
+
+    authState.session = cloneSession(nextSession)
+    return cloneSession(nextSession)
   }
 }
 

@@ -48,3 +48,21 @@ export function clearStoredSession() {
 export function getStoredAccessToken() {
   return readStoredSession()?.accessToken ?? null
 }
+
+export function patchStoredSessionUser(userPatch: Partial<AuthSession['user']>) {
+  const session = readStoredSession()
+  if (!session) {
+    return null
+  }
+
+  const nextSession: AuthSession = {
+    ...session,
+    user: {
+      ...session.user,
+      ...userPatch
+    }
+  }
+
+  writeStoredSession(nextSession, ApplicationSettings.hasKey(SESSION_STORAGE_KEY))
+  return nextSession
+}

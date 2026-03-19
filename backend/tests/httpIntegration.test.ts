@@ -224,7 +224,7 @@ runIntegrationTest('register, login refresh and profile flow work through HTTP',
   assert.equal(refreshResult.response.status, 200);
   assert.equal(refreshResult.payload?.user.email, session.email);
 
-  const profileResult = await apiRequest<{
+  const initialProfileResult = await apiRequest<{
     email: string;
     appointmentCount: number;
     vehicleCount: number;
@@ -233,11 +233,78 @@ runIntegrationTest('register, login refresh and profile flow work through HTTP',
     token: loginResult.payload?.accessToken
   });
 
+  assert.equal(initialProfileResult.response.status, 200);
+  assert.equal(initialProfileResult.payload?.email, session.email);
+  assert.equal(initialProfileResult.payload?.appointmentCount, 0);
+  assert.equal(initialProfileResult.payload?.vehicleCount, 0);
+  assert.equal(initialProfileResult.payload?.loyaltyPoints, 0);
+
+  const updatedEmail = `updated-${randomBytes(4).toString('hex')}@example.com`;
+  const updateProfileResult = await apiRequest<{
+    fullName: string;
+    email: string;
+    phone: string;
+    addressLine: string;
+    city: string;
+    preferredGarage: string;
+    notes: string;
+  }>('/api/profile', {
+    method: 'PUT',
+    token: loginResult.payload?.accessToken,
+    body: {
+      fullName: 'Integration User Updated',
+      email: updatedEmail,
+      phone: '+1 438 555 2026',
+      addressLine: '500 Rue de Test',
+      city: 'Quebec, QC',
+      preferredGarage: 'Garage Quebec Centre',
+      notes: 'Profil modifie depuis le test integration.'
+    }
+  });
+
+  assert.equal(updateProfileResult.response.status, 200);
+  assert.equal(updateProfileResult.payload?.fullName, 'Integration User Updated');
+  assert.equal(updateProfileResult.payload?.email, updatedEmail);
+  assert.equal(updateProfileResult.payload?.phone, '+1 438 555 2026');
+  assert.equal(updateProfileResult.payload?.addressLine, '500 Rue de Test');
+  assert.equal(updateProfileResult.payload?.city, 'Quebec, QC');
+  assert.equal(updateProfileResult.payload?.preferredGarage, 'Garage Quebec Centre');
+  assert.equal(updateProfileResult.payload?.notes, 'Profil modifie depuis le test integration.');
+
+  const profileResult = await apiRequest<{
+    email: string;
+    fullName: string;
+    phone: string;
+    addressLine: string;
+    city: string;
+    preferredGarage: string;
+    notes: string;
+  }>('/api/profile', {
+    token: loginResult.payload?.accessToken
+  });
+
   assert.equal(profileResult.response.status, 200);
-  assert.equal(profileResult.payload?.email, session.email);
-  assert.equal(profileResult.payload?.appointmentCount, 0);
-  assert.equal(profileResult.payload?.vehicleCount, 0);
-  assert.equal(profileResult.payload?.loyaltyPoints, 0);
+  assert.equal(profileResult.payload?.email, updatedEmail);
+  assert.equal(profileResult.payload?.fullName, 'Integration User Updated');
+  assert.equal(profileResult.payload?.phone, '+1 438 555 2026');
+  assert.equal(profileResult.payload?.addressLine, '500 Rue de Test');
+  assert.equal(profileResult.payload?.city, 'Quebec, QC');
+  assert.equal(profileResult.payload?.preferredGarage, 'Garage Quebec Centre');
+  assert.equal(profileResult.payload?.notes, 'Profil modifie depuis le test integration.');
+
+  const refreshedAfterProfileUpdate = await apiRequest<{
+    accessToken: string;
+    refreshToken: string;
+    user: { email: string };
+  }>('/api/auth/refresh', {
+    method: 'POST',
+    body: {
+      refreshToken: loginResult.payload?.refreshToken
+    }
+  });
+
+  assert.equal(refreshedAfterProfileUpdate.response.status, 200);
+  assert.equal(refreshedAfterProfileUpdate.payload?.user.email, updatedEmail);
 
   const invoicesResult = await apiRequest<unknown[]>('/api/profile/invoices', {
     token: loginResult.payload?.accessToken
