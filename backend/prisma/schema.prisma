@@ -94,7 +94,8 @@ model User {
   reviews              Review[]
   favorites            Favorite[]
   quotes               Quote[]
-  payments             PaymentMethod[]
+  paymentMethod        PaymentMethod?
+  profileSettings      UserProfileSettings?
   notifications        Notification[]
   messagesSent         ChatMessage[]   @relation("MessagesSent")
   messagesReceived     ChatMessage[]   @relation("MessagesReceived")
@@ -234,6 +235,9 @@ model Review {
   user          User        @relation(fields: [userId], references: [id])
   reservation   Reservation @relation(fields: [reservationId], references: [id])
   createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([userId, reservationId])
 }
 
 model Notification {
@@ -257,14 +261,36 @@ model Location {
 }
 
 model PaymentMethod {
-  id        String  @id @default(cuid())
-  userId    String
-  stripeRef String
-  brand     String?
-  last4     String?
-  expMonth  Int?
-  expYear   Int?
-  user      User    @relation(fields: [userId], references: [id])
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  provider              String   @default("stripe")
+  status                String   @default("not_configured")
+  stripeRef             String
+  brand                 String?
+  last4                 String?
+  expMonth              Int?
+  expYear               Int?
+  lastCheckoutSessionId String?
+  lastSyncAt            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id])
+}
+
+model UserProfileSettings {
+  userId             String   @id
+  membershipLabel    String?
+  verified           Boolean?
+  memberSince        DateTime?
+  preferredGarage    String?
+  defaultVehicleLabel String?
+  loyaltyPoints      Int?
+  addressLine        String?
+  city               String?
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id])
 }
 
 model Quote {

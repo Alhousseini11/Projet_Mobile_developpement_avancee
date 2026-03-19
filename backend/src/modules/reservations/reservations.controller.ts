@@ -1,18 +1,20 @@
-import { randomUUID } from 'crypto';
+import { Prisma, ReservationStatus as PrismaReservationStatus } from '@prisma/client';
 import { Request, Response } from 'express';
 import { isDemoUserEmail, normalizeEmail } from '../../config/demo';
+import { prisma } from '../../data/prisma/client';
 import { createPlaceholderHandler } from '../_shared/createPlaceholderHandler';
+import {
+  calculateReservationPricing,
+  findReservationService,
+  getReservationServiceLabel,
+  RESERVATION_SERVICES,
+  SLOT_BY_SERVICE,
+  type ReservationServiceOption
+} from './reservationCatalog';
 
 type ReservationStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
 
-interface ReservationServiceOption {
-  id: string;
-  label: string;
-  durationMinutes: number;
-  price: number;
-}
-
-export interface ReservationRecord {
+interface ReservationRecord {
   id: string;
   userId: string;
   serviceId: string;
@@ -25,64 +27,26 @@ export interface ReservationRecord {
   updatedAt: Date;
 }
 
-const RESERVATION_SERVICES: ReservationServiceOption[] = [
+const DEMO_RESERVATION_SEED = [
   {
-    id: 'oil-change',
-    label: 'Vidange',
-    durationMinutes: 45,
-    price: 79
-  },
-  {
-    id: 'brakes',
-    label: 'Freins',
-    durationMinutes: 90,
-    price: 149
-  },
-  {
-    id: 'battery',
-    label: 'Batterie',
-    durationMinutes: 30,
-    price: 99
-  },
-  {
-    id: 'diagnostic',
-    label: 'Diagnostic',
-    durationMinutes: 60,
-    price: 59
-  }
-];
-
-const SLOT_BY_SERVICE: Record<string, string[]> = {
-  'oil-change': ['08:30', '10:00', '13:30', '15:00'],
-  brakes: ['09:00', '11:30', '14:00', '16:30'],
-  battery: ['08:00', '10:30', '13:00', '17:00'],
-  diagnostic: ['09:30', '12:00', '15:30', '18:00']
-};
-
-const DEMO_RESERVATION_SEED: Array<Omit<ReservationRecord, 'userId'>> = [
-  {
-    id: 'reservation-1',
+    idSuffix: 'reservation-1',
     serviceId: 'oil-change',
-    serviceLabel: 'Vidange',
-    date: '2026-03-18',
-    time: '10:00',
-    status: 'confirmed',
+    scheduledAt: new Date('2026-03-18T10:00:00Z'),
+    status: PrismaReservationStatus.CONFIRMED,
     createdAt: new Date('2026-03-10T09:00:00Z'),
-    updatedAt: new Date('2026-03-10T09:00:00Z')
+    updatedAt: new Date('2026-03-10T09:00:00Z'),
+    amount: new Prisma.Decimal('90.86')
   },
   {
-    id: 'reservation-2',
+    idSuffix: 'reservation-2',
     serviceId: 'diagnostic',
-    serviceLabel: 'Diagnostic',
-    date: '2026-03-22',
-    time: '15:30',
-    status: 'pending',
+    scheduledAt: new Date('2026-03-22T15:30:00Z'),
+    status: PrismaReservationStatus.PENDING,
     createdAt: new Date('2026-03-12T14:15:00Z'),
-    updatedAt: new Date('2026-03-12T14:15:00Z')
+    updatedAt: new Date('2026-03-12T14:15:00Z'),
+    amount: new Prisma.Decimal('67.84')
   }
-];
-
-const reservationsByUser = new Map<string, ReservationRecord[]>();
+] as const;
 
 function getAuthenticatedUser(res: Response) {
   return {
@@ -91,82 +55,229 @@ function getAuthenticatedUser(res: Response) {
   };
 }
 
-function createDemoReservations(userId: string) {
-  return DEMO_RESERVATION_SEED.map(reservation => ({
-    ...reservation,
-    id: `${userId}-${reservation.id}`,
-    userId
-  }));
+function toIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
-function getUserReservations(userId: string, email?: string | null) {
-  const existing = reservationsByUser.get(userId);
-  if (existing) {
-    return existing;
+function toTimeLabel(date: Date) {
+  return date.toISOString().slice(11, 16);
+}
+
+function toPrismaStatus(status: string | undefined): PrismaReservationStatus | null {
+  switch (status) {
+    case 'pending':
+      return PrismaReservationStatus.PENDING;
+    case 'confirmed':
+      return PrismaReservationStatus.CONFIRMED;
+    case 'completed':
+      return PrismaReservationStatus.COMPLETED;
+    case 'cancelled':
+      return PrismaReservationStatus.CANCELLED;
+    default:
+      return null;
   }
-
-  const initialReservations =
-    isDemoUserEmail(email) ? createDemoReservations(userId) : [];
-  reservationsByUser.set(userId, initialReservations);
-  return initialReservations;
 }
 
-export function listReservationsForUser(userId: string, email?: string | null) {
-  if (!userId) {
-    return [] as ReservationRecord[];
+function fromPrismaStatus(status: PrismaReservationStatus): ReservationStatus {
+  switch (status) {
+    case PrismaReservationStatus.CONFIRMED:
+    case PrismaReservationStatus.PAID:
+      return 'confirmed';
+    case PrismaReservationStatus.COMPLETED:
+      return 'completed';
+    case PrismaReservationStatus.CANCELLED:
+      return 'cancelled';
+    case PrismaReservationStatus.PENDING:
+    default:
+      return 'pending';
   }
-
-  return [...getUserReservations(userId, email)];
 }
 
-export function findReservationForUser(
-  userId: string,
-  reservationId: string,
-  email?: string | null
-) {
-  return getUserReservations(userId, email).find(item => item.id === reservationId) ?? null;
+function buildScheduledAt(date: string, time: string) {
+  return new Date(`${date}T${time}:00`);
 }
 
-function getAllReservations() {
-  return [...reservationsByUser.values()].flatMap(userReservations => userReservations);
-}
-
-export function getReservationCountForUser(userId: string, email?: string | null) {
-  if (!userId) {
-    return 0;
-  }
-
-  return getUserReservations(userId, email).length;
-}
-
-function serializeReservation(reservation: ReservationRecord) {
-  const { userId: _userId, ...payload } = reservation;
+function serializeReservation(reservation: {
+  id: string;
+  userId: string;
+  serviceType: string;
+  description: string | null;
+  status: PrismaReservationStatus;
+  scheduledAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
   return {
-    ...payload,
+    id: reservation.id,
+    serviceId: reservation.serviceType,
+    serviceLabel: getReservationServiceLabel(reservation.serviceType),
+    date: toIsoDate(reservation.scheduledAt),
+    time: toTimeLabel(reservation.scheduledAt),
+    status: fromPrismaStatus(reservation.status),
+    notes: reservation.description ?? undefined,
     createdAt: reservation.createdAt.toISOString(),
     updatedAt: reservation.updatedAt.toISOString()
   };
 }
 
-function findService(serviceId: string) {
-  return RESERVATION_SERVICES.find(service => service.id === serviceId) ?? null;
+async function ensureDemoReservations(userId: string, email?: string | null) {
+  if (!userId || !isDemoUserEmail(email)) {
+    return;
+  }
+
+  for (const reservation of DEMO_RESERVATION_SEED) {
+    await prisma.reservation.upsert({
+      where: { id: `${userId}-${reservation.idSuffix}` },
+      update: {},
+      create: {
+        id: `${userId}-${reservation.idSuffix}`,
+        userId,
+        serviceType: reservation.serviceId,
+        description: null,
+        status: reservation.status,
+        scheduledAt: reservation.scheduledAt,
+        amount: reservation.amount,
+        currency: 'CAD',
+        createdAt: reservation.createdAt,
+        updatedAt: reservation.updatedAt
+      }
+    });
+  }
 }
 
-function getReservedSlots(serviceId: string, date: string, excludeId?: string) {
-  return getAllReservations()
-    .filter(
-      reservation =>
-        reservation.id !== excludeId &&
-        reservation.serviceId === serviceId &&
-        reservation.date === date &&
-        reservation.status !== 'cancelled'
-    )
-    .map(reservation => reservation.time);
+async function readReservationsForUser(userId: string, email?: string | null) {
+  if (!userId) {
+    return [] as Array<{
+      id: string;
+      userId: string;
+      serviceType: string;
+      description: string | null;
+      status: PrismaReservationStatus;
+      scheduledAt: Date;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+  }
+
+  await ensureDemoReservations(userId, email);
+
+  return prisma.reservation.findMany({
+    where: { userId },
+    orderBy: { scheduledAt: 'asc' },
+    select: {
+      id: true,
+      userId: true,
+      serviceType: true,
+      description: true,
+      status: true,
+      scheduledAt: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
 }
 
-function getAvailableSlots(serviceId: string, date: string, excludeId?: string) {
+export async function listReservationsForUser(userId: string, email?: string | null) {
+  const reservations = await readReservationsForUser(userId, email);
+  return reservations.map(item => {
+    const serialized = serializeReservation(item);
+    return {
+      id: serialized.id,
+      userId,
+      serviceId: serialized.serviceId,
+      serviceLabel: serialized.serviceLabel,
+      date: serialized.date,
+      time: serialized.time,
+      status: serialized.status,
+      notes: serialized.notes,
+      createdAt: new Date(serialized.createdAt),
+      updatedAt: new Date(serialized.updatedAt)
+    } satisfies ReservationRecord;
+  });
+}
+
+export async function findReservationForUser(
+  userId: string,
+  reservationId: string,
+  email?: string | null
+) {
+  if (!userId) {
+    return null;
+  }
+
+  await ensureDemoReservations(userId, email);
+
+  const reservation = await prisma.reservation.findFirst({
+    where: {
+      id: reservationId,
+      userId
+    },
+    select: {
+      id: true,
+      userId: true,
+      serviceType: true,
+      description: true,
+      status: true,
+      scheduledAt: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
+
+  if (!reservation) {
+    return null;
+  }
+
+  const serialized = serializeReservation(reservation);
+  return {
+    id: serialized.id,
+    userId,
+    serviceId: serialized.serviceId,
+    serviceLabel: serialized.serviceLabel,
+    date: serialized.date,
+    time: serialized.time,
+    status: serialized.status,
+    notes: serialized.notes,
+    createdAt: new Date(serialized.createdAt),
+    updatedAt: new Date(serialized.updatedAt)
+  } satisfies ReservationRecord;
+}
+
+export async function getReservationCountForUser(userId: string, email?: string | null) {
+  if (!userId) {
+    return 0;
+  }
+
+  await ensureDemoReservations(userId, email);
+  return prisma.reservation.count({ where: { userId } });
+}
+
+async function getReservedSlots(serviceId: string, date: string, excludeId?: string) {
+  const start = new Date(`${date}T00:00:00.000Z`);
+  const end = new Date(`${date}T23:59:59.999Z`);
+  const reservations = await prisma.reservation.findMany({
+    where: {
+      serviceType: serviceId,
+      scheduledAt: {
+        gte: start,
+        lte: end
+      },
+      status: {
+        not: PrismaReservationStatus.CANCELLED
+      },
+      ...(excludeId ? { id: { not: excludeId } } : {})
+    },
+    select: {
+      scheduledAt: true
+    }
+  });
+
+  return reservations.map(reservation => toTimeLabel(reservation.scheduledAt));
+}
+
+async function getAvailableSlots(serviceId: string, date: string, excludeId?: string) {
   const baseSlots = SLOT_BY_SERVICE[serviceId] ?? ['09:00', '11:00', '14:00', '16:00'];
-  const reservedSlots = new Set(getReservedSlots(serviceId, date, excludeId));
+  const reservedSlots = new Set(await getReservedSlots(serviceId, date, excludeId));
   return baseSlots.filter(slot => !reservedSlots.has(slot));
 }
 
@@ -185,26 +296,23 @@ export const listAvailableSlots = async (req: Request, res: Response) => {
     return;
   }
 
-  res.json(getAvailableSlots(serviceId, date));
+  res.json(await getAvailableSlots(serviceId, date));
 };
 
 export const listReservations = async (_req: Request, res: Response) => {
   const { userId, email } = getAuthenticatedUser(res);
-  const sortedReservations = [...getUserReservations(userId, email)].sort((left, right) => {
-    const leftKey = `${left.date}T${left.time}:00`;
-    const rightKey = `${right.date}T${right.time}:00`;
-    return leftKey.localeCompare(rightKey);
-  });
-
-  res.json(sortedReservations.map(serializeReservation));
+  const reservations = await readReservationsForUser(userId, email);
+  res.json(reservations.map(serializeReservation));
 };
 
 export const createReservation = async (req: Request, res: Response) => {
   const { userId, email } = getAuthenticatedUser(res);
-  const serviceId = typeof req.body?.serviceId === 'string' ? req.body.serviceId : '';
-  const date = typeof req.body?.date === 'string' ? req.body.date : '';
-  const time = typeof req.body?.time === 'string' ? req.body.time : '';
-  const notes = typeof req.body?.notes === 'string' ? req.body.notes : undefined;
+  await ensureDemoReservations(userId, email);
+
+  const serviceId = typeof req.body?.serviceId === 'string' ? req.body.serviceId.trim() : '';
+  const date = typeof req.body?.date === 'string' ? req.body.date.trim() : '';
+  const time = typeof req.body?.time === 'string' ? req.body.time.trim() : '';
+  const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : null;
 
   if (!serviceId || !date || !time) {
     res.status(400).json({
@@ -213,7 +321,7 @@ export const createReservation = async (req: Request, res: Response) => {
     return;
   }
 
-  const service = findService(serviceId);
+  const service = findReservationService(serviceId);
   if (!service) {
     res.status(404).json({
       message: `Unknown reservation service: ${serviceId}`
@@ -221,7 +329,7 @@ export const createReservation = async (req: Request, res: Response) => {
     return;
   }
 
-  const availableSlots = getAvailableSlots(serviceId, date);
+  const availableSlots = await getAvailableSlots(serviceId, date);
   if (!availableSlots.includes(time)) {
     res.status(409).json({
       message: 'Selected slot is not available'
@@ -229,31 +337,37 @@ export const createReservation = async (req: Request, res: Response) => {
     return;
   }
 
-  const now = new Date();
-  const userReservations = getUserReservations(userId, email);
-  const reservation: ReservationRecord = {
-    id: randomUUID(),
-    userId,
-    serviceId,
-    serviceLabel:
-      typeof req.body?.serviceLabel === 'string' && req.body.serviceLabel.trim()
-        ? req.body.serviceLabel
-        : service.label,
-    date,
-    time,
-    status: 'confirmed',
-    notes,
-    createdAt: now,
-    updatedAt: now
-  };
+  const scheduledAt = buildScheduledAt(date, time);
+  const pricing = calculateReservationPricing(serviceId);
 
-  userReservations.unshift(reservation);
+  const reservation = await prisma.reservation.create({
+    data: {
+      userId,
+      serviceType: service.id,
+      description: notes,
+      status: PrismaReservationStatus.CONFIRMED,
+      scheduledAt,
+      amount: new Prisma.Decimal(pricing.totalAmount.toFixed(2)),
+      currency: 'CAD'
+    },
+    select: {
+      id: true,
+      userId: true,
+      serviceType: true,
+      description: true,
+      status: true,
+      scheduledAt: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
+
   res.status(201).json(serializeReservation(reservation));
 };
 
 export const getReservationById = async (req: Request, res: Response) => {
   const { userId, email } = getAuthenticatedUser(res);
-  const reservation = getUserReservations(userId, email).find(item => item.id === req.params.id);
+  const reservation = await findReservationForUser(userId, req.params.id, email);
 
   if (!reservation) {
     res.status(404).json({
@@ -262,14 +376,18 @@ export const getReservationById = async (req: Request, res: Response) => {
     return;
   }
 
-  res.json(serializeReservation(reservation));
+  res.json({
+    ...reservation,
+    createdAt: reservation.createdAt.toISOString(),
+    updatedAt: reservation.updatedAt.toISOString()
+  });
 };
 
 export const updateReservation = async (req: Request, res: Response) => {
   const { userId, email } = getAuthenticatedUser(res);
-  const reservation = getUserReservations(userId, email).find(item => item.id === req.params.id);
+  const existingReservation = await findReservationForUser(userId, req.params.id, email);
 
-  if (!reservation) {
+  if (!existingReservation) {
     res.status(404).json({
       message: `Reservation ${req.params.id} not found`
     });
@@ -278,14 +396,18 @@ export const updateReservation = async (req: Request, res: Response) => {
 
   const nextServiceId =
     typeof req.body?.serviceId === 'string' && req.body.serviceId.trim()
-      ? req.body.serviceId
-      : reservation.serviceId;
+      ? req.body.serviceId.trim()
+      : existingReservation.serviceId;
   const nextDate =
-    typeof req.body?.date === 'string' && req.body.date.trim() ? req.body.date : reservation.date;
+    typeof req.body?.date === 'string' && req.body.date.trim()
+      ? req.body.date.trim()
+      : existingReservation.date;
   const nextTime =
-    typeof req.body?.time === 'string' && req.body.time.trim() ? req.body.time : reservation.time;
+    typeof req.body?.time === 'string' && req.body.time.trim()
+      ? req.body.time.trim()
+      : existingReservation.time;
 
-  const service = findService(nextServiceId);
+  const service = findReservationService(nextServiceId);
   if (!service) {
     res.status(404).json({
       message: `Unknown reservation service: ${nextServiceId}`
@@ -293,39 +415,47 @@ export const updateReservation = async (req: Request, res: Response) => {
     return;
   }
 
-  const availableSlots = getAvailableSlots(nextServiceId, nextDate, reservation.id);
   const slotChanged =
-    nextServiceId !== reservation.serviceId ||
-    nextDate !== reservation.date ||
-    nextTime !== reservation.time;
+    nextServiceId !== existingReservation.serviceId ||
+    nextDate !== existingReservation.date ||
+    nextTime !== existingReservation.time;
 
-  if (slotChanged && !availableSlots.includes(nextTime)) {
-    res.status(409).json({
-      message: 'Selected slot is not available'
-    });
-    return;
+  if (slotChanged) {
+    const availableSlots = await getAvailableSlots(nextServiceId, nextDate, existingReservation.id);
+    if (!availableSlots.includes(nextTime)) {
+      res.status(409).json({
+        message: 'Selected slot is not available'
+      });
+      return;
+    }
   }
 
-  reservation.serviceId = nextServiceId;
-  reservation.serviceLabel =
-    typeof req.body?.serviceLabel === 'string' && req.body.serviceLabel.trim()
-      ? req.body.serviceLabel
-      : service.label;
-  reservation.date = nextDate;
-  reservation.time = nextTime;
+  const nextStatus =
+    typeof req.body?.status === 'string' ? toPrismaStatus(req.body.status) : null;
+  const pricing = calculateReservationPricing(nextServiceId);
 
-  if (
-    typeof req.body?.status === 'string' &&
-    ['pending', 'confirmed', 'completed', 'cancelled'].includes(req.body.status)
-  ) {
-    reservation.status = req.body.status as ReservationStatus;
-  }
+  const reservation = await prisma.reservation.update({
+    where: { id: existingReservation.id },
+    data: {
+      serviceType: service.id,
+      description: typeof req.body?.notes === 'string' ? req.body.notes.trim() || null : existingReservation.notes ?? null,
+      status: nextStatus ?? toPrismaStatus(existingReservation.status) ?? PrismaReservationStatus.CONFIRMED,
+      scheduledAt: buildScheduledAt(nextDate, nextTime),
+      amount: new Prisma.Decimal(pricing.totalAmount.toFixed(2)),
+      currency: 'CAD'
+    },
+    select: {
+      id: true,
+      userId: true,
+      serviceType: true,
+      description: true,
+      status: true,
+      scheduledAt: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
 
-  if (typeof req.body?.notes === 'string') {
-    reservation.notes = req.body.notes;
-  }
-
-  reservation.updatedAt = new Date();
   res.json(serializeReservation(reservation));
 };
 

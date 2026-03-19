@@ -1,13 +1,18 @@
-import { Role } from '@prisma/client';
+import { Prisma, ReservationStatus, Role } from '@prisma/client';
 import { Request, Response } from 'express';
-import { DEMO_ACCOUNT, isDemoUserEmail } from '../../config/demo';
+import { DEMO_ACCOUNT } from '../../config/demo';
 import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { createStripeClient } from '../../data/stripe/stripeClient';
 import { isCurrentVehicleSchemaAvailable } from '../_shared/schemaCapabilities';
-import { resolveOptionalRequestUser } from '../auth/auth.service';
+import {
+  ensureDemoUserExists,
+  resolveOptionalRequestUser,
+  type AuthenticatedUser
+} from '../auth/auth.service';
 import { getReservationCountForUser } from '../reservations/reservations.controller';
+import { findReservationService, getReservationServiceLabel } from '../reservations/reservationCatalog';
 
 interface ProfilePayload {
   id: string;
@@ -69,6 +74,8 @@ interface InvoicePayload {
   lineItems: InvoiceLineItemPayload[];
 }
 
+const DEFAULT_TAX_RATE = 0.15;
+
 const defaultProfileState: ProfilePayload = {
   id: 'demo-user',
   fullName: DEMO_ACCOUNT.fullName,
@@ -87,11 +94,7 @@ const defaultProfileState: ProfilePayload = {
   notes: 'Preference pour les interventions en semaine le matin.'
 };
 
-const profileOverrides = new Map<string, Partial<ProfilePayload>>();
-const paymentStates = new Map<string, PaymentMethodPayload>();
-const invoiceStates = new Map<string, InvoicePayload[]>();
-
-const demoInvoices: InvoicePayload[] = [
+const defaultInvoices: InvoicePayload[] = [
   {
     id: 'invoice-1001',
     number: 'INV-2026-001',
@@ -138,25 +141,51 @@ const demoInvoices: InvoicePayload[] = [
   }
 ];
 
+function hasOwnProperty(value: object, key: keyof ProfilePayload) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function normalizeOptionalText(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeOptionalDate(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizeOptionalInteger(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.round(value));
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : Math.max(0, parsed);
+  }
+
+  return null;
+}
+
 function cloneInvoice(invoice: InvoicePayload): InvoicePayload {
   return {
     ...invoice,
     lineItems: invoice.lineItems.map(lineItem => ({ ...lineItem }))
   };
-}
-
-function getUserInvoices(userId: string, email?: string | null) {
-  const existing = invoiceStates.get(userId);
-  if (existing) {
-    return existing;
-  }
-
-  const initialInvoices =
-    isDemoUserEmail(email)
-      ? demoInvoices.map(cloneInvoice)
-      : [];
-  invoiceStates.set(userId, initialInvoices);
-  return initialInvoices;
 }
 
 function isStripeConfigured() {
@@ -171,61 +200,64 @@ function getStripeCancelUrl() {
   return env.STRIPE_CANCEL_URL || 'https://example.com/garage/stripe/cancel';
 }
 
-function createDefaultPaymentState(): PaymentMethodPayload {
-  return {
-    provider: 'stripe',
-    status: 'not_configured',
-    backendReachable: true,
-    stripeConfigured: false,
-    customerId: null,
-    card: null,
-    lastCheckoutSessionId: null,
-    lastSyncAt: null,
-    message: 'Ajoutez une cle Stripe cote backend pour activer le paiement.'
-  };
-}
-
-function getPaymentState(userId: string) {
-  const existing = paymentStates.get(userId);
-  if (existing) {
-    return existing;
-  }
-
-  const initial = createDefaultPaymentState();
-  paymentStates.set(userId, initial);
-  return initial;
-}
-
-function setPaymentState(userId: string, state: PaymentMethodPayload) {
-  paymentStates.set(userId, state);
-  return state;
-}
-
-function buildPaymentMessage(state: PaymentMethodPayload) {
+function buildPaymentMessage(status: PaymentMethodPayload['status'], card: PaymentCardPayload | null) {
   if (!isStripeConfigured()) {
     return 'Ajoutez une cle Stripe cote backend pour activer le paiement.';
   }
 
-  if (state.status === 'ready' && state.card) {
+  if (status === 'ready' && card) {
     return 'Carte Stripe synchronisee et prete pour les prochains paiements.';
   }
 
-  if (state.status === 'pending') {
+  if (status === 'pending') {
     return 'Session Stripe ouverte. Finalisez la configuration puis revenez synchroniser.';
   }
 
   return 'Aucun moyen de paiement Stripe enregistre.';
 }
 
-function getPaymentSummary(userId: string): PaymentMethodPayload {
-  const state = getPaymentState(userId);
+function normalizePaymentStatus(
+  value?: string | null
+): PaymentMethodPayload['status'] {
+  if (value === 'pending' || value === 'ready') {
+    return value;
+  }
+
+  return 'not_configured';
+}
+
+function serializePaymentMethod(record?: {
+  stripeRef: string;
+  status: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+  lastCheckoutSessionId: string | null;
+  lastSyncAt: Date | null;
+} | null): PaymentMethodPayload {
+  const card =
+    record?.brand && record.last4 && record.expMonth && record.expYear
+      ? {
+          brand: record.brand,
+          last4: record.last4,
+          expMonth: record.expMonth,
+          expYear: record.expYear
+        }
+      : null;
+
+  const status = normalizePaymentStatus(record?.status);
 
   return {
-    ...state,
+    provider: 'stripe',
+    status,
     backendReachable: true,
     stripeConfigured: isStripeConfigured(),
-    message: buildPaymentMessage(state),
-    card: state.card ? { ...state.card } : null
+    customerId: record?.stripeRef ?? null,
+    card,
+    lastCheckoutSessionId: record?.lastCheckoutSessionId ?? null,
+    lastSyncAt: record?.lastSyncAt?.toISOString() ?? null,
+    message: buildPaymentMessage(status, card)
   };
 }
 
@@ -347,6 +379,33 @@ function mapMembershipLabel(role: Role) {
   return 'Client';
 }
 
+function toProfileUser(user: {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  role: Role;
+  createdAt: Date;
+}): AuthenticatedUser {
+  return {
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    phone: user.phone,
+    role: user.role,
+    createdAt: user.createdAt
+  };
+}
+
+async function resolveProfileUser(req: Request) {
+  const authenticatedUser = await resolveOptionalRequestUser(req);
+  if (authenticatedUser) {
+    return authenticatedUser;
+  }
+
+  return ensureDemoUserExists();
+}
+
 async function countVehicles(userId: string) {
   if (await isCurrentVehicleSchemaAvailable()) {
     return prisma.vehicle.count({ where: { userId } }).catch(() => 0);
@@ -373,8 +432,8 @@ async function findDefaultVehicleLabel(userId: string) {
     return vehicle ? `${vehicle.name} ${vehicle.model}` : null;
   }
 
-  const rows = await prisma.$queryRaw<Array<{ brand: string; model: string }>>`
-    SELECT "brand", "model"
+  const rows = await prisma.$queryRaw<Array<{ name: string; model: string }>>`
+    SELECT "name", "model"
     FROM "Vehicle"
     WHERE "userId" = ${userId}
     ORDER BY "id" DESC
@@ -382,60 +441,184 @@ async function findDefaultVehicleLabel(userId: string) {
   `;
 
   const vehicle = rows[0];
-  return vehicle ? `${vehicle.brand} ${vehicle.model}` : null;
+  return vehicle ? `${vehicle.name} ${vehicle.model}` : null;
 }
 
-async function buildProfileResponse(req: Request): Promise<ProfilePayload> {
-  const authenticatedUser = await resolveOptionalRequestUser(req);
-  const userId = authenticatedUser?.id ?? defaultProfileState.id;
-  const override = authenticatedUser ? profileOverrides.get(userId) ?? {} : {};
-  const fallbackAppointmentCount = authenticatedUser
-    ? getReservationCountForUser(authenticatedUser.id, authenticatedUser.email)
-    : defaultProfileState.appointmentCount;
-
-  const [vehicleCount, appointmentCount, defaultVehicleLabel] = await Promise.all([
-    countVehicles(userId).catch(() => authenticatedUser ? 0 : defaultProfileState.vehicleCount),
-    prisma.reservation.count({ where: { userId } }).catch(() =>
-      authenticatedUser ? 0 : fallbackAppointmentCount
-    ),
-    findDefaultVehicleLabel(userId).catch(() => null)
-  ]);
-  const resolvedAppointmentCount =
-    appointmentCount > 0 ? appointmentCount : fallbackAppointmentCount;
-
+async function buildProfileResponseForUser(
+  authenticatedUser: AuthenticatedUser | null
+): Promise<ProfilePayload> {
   if (!authenticatedUser) {
-    return {
-      ...defaultProfileState,
-      vehicleCount: vehicleCount > 0 ? vehicleCount : defaultProfileState.vehicleCount,
-      appointmentCount: resolvedAppointmentCount
-    };
+    return { ...defaultProfileState };
   }
+
+  const [settings, vehicleCount, appointmentCount, detectedVehicleLabel] = await Promise.all([
+    prisma.userProfileSettings.findUnique({
+      where: { userId: authenticatedUser.id }
+    }),
+    countVehicles(authenticatedUser.id).catch(() => 0),
+    getReservationCountForUser(authenticatedUser.id, authenticatedUser.email).catch(() => 0),
+    findDefaultVehicleLabel(authenticatedUser.id).catch(() => null)
+  ]);
+
+  const memberSince = settings?.memberSince ?? authenticatedUser.createdAt;
+  const defaultVehicleLabel =
+    settings?.defaultVehicleLabel ??
+    detectedVehicleLabel ??
+    'Aucun vehicule';
 
   return {
     id: authenticatedUser.id,
     fullName: authenticatedUser.fullName,
     email: authenticatedUser.email,
-    phone: authenticatedUser.phone ?? override.phone ?? 'A completer',
-    membershipLabel: override.membershipLabel ?? mapMembershipLabel(authenticatedUser.role),
-    verified: override.verified ?? true,
-    memberSince: override.memberSince ?? authenticatedUser.createdAt.toISOString(),
-    preferredGarage: override.preferredGarage ?? 'Garage Montreal Centre',
-    defaultVehicleLabel:
-      override.defaultVehicleLabel ??
-      (defaultVehicleLabel ?? 'Aucun vehicule'),
-    appointmentCount: resolvedAppointmentCount,
+    phone: authenticatedUser.phone ?? defaultProfileState.phone,
+    membershipLabel: settings?.membershipLabel ?? mapMembershipLabel(authenticatedUser.role),
+    verified: settings?.verified ?? true,
+    memberSince: memberSince.toISOString().slice(0, 10),
+    preferredGarage: settings?.preferredGarage ?? 'Garage Montreal Centre',
+    defaultVehicleLabel,
+    appointmentCount,
     vehicleCount,
-    loyaltyPoints: override.loyaltyPoints ?? resolvedAppointmentCount * 60 + vehicleCount * 30,
-    addressLine: override.addressLine ?? 'Adresse a completer',
-    city: override.city ?? 'Montreal, QC',
-    notes: override.notes ?? 'Compte client connecte via authentification backend.'
+    loyaltyPoints: settings?.loyaltyPoints ?? appointmentCount * 60 + vehicleCount * 30,
+    addressLine: settings?.addressLine ?? 'Adresse a completer',
+    city: settings?.city ?? 'Montreal, QC',
+    notes: settings?.notes ?? 'Compte client connecte via authentification backend.'
   };
 }
 
+async function getPaymentSummaryForUser(userId?: string | null) {
+  if (!userId) {
+    return serializePaymentMethod(null);
+  }
+
+  const paymentMethod = await prisma.paymentMethod.findUnique({
+    where: { userId },
+    select: {
+      stripeRef: true,
+      status: true,
+      brand: true,
+      last4: true,
+      expMonth: true,
+      expYear: true,
+      lastCheckoutSessionId: true,
+      lastSyncAt: true
+    }
+  });
+
+  return serializePaymentMethod(paymentMethod);
+}
+
+function buildReservationInvoiceAmounts(serviceType: string, amount: Prisma.Decimal) {
+  const totalAmount = Number(amount);
+  const service = findReservationService(serviceType);
+
+  if (service) {
+    const subtotalAmount = Number(service.price.toFixed(2));
+    const taxAmount = Number((totalAmount - subtotalAmount).toFixed(2));
+
+    return {
+      subtotalAmount,
+      taxAmount: Number.isFinite(taxAmount) ? taxAmount : 0,
+      totalAmount: Number(totalAmount.toFixed(2))
+    };
+  }
+
+  const normalizedTotal = Number(totalAmount.toFixed(2));
+  const subtotalAmount = Number((normalizedTotal / (1 + DEFAULT_TAX_RATE)).toFixed(2));
+  const taxAmount = Number((normalizedTotal - subtotalAmount).toFixed(2));
+
+  return {
+    subtotalAmount,
+    taxAmount,
+    totalAmount: normalizedTotal
+  };
+}
+
+function buildInvoiceNumber(reservationId: string, issuedAt: Date) {
+  const suffix = reservationId.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || '000000';
+  return `INV-${issuedAt.getUTCFullYear()}-${suffix}`;
+}
+
+async function buildInvoicesForUser(user: AuthenticatedUser) {
+  await getReservationCountForUser(user.id, user.email);
+
+  const [reservations, settings, detectedVehicleLabel] = await Promise.all([
+    prisma.reservation.findMany({
+      where: { userId: user.id },
+      orderBy: [{ createdAt: 'desc' }, { scheduledAt: 'desc' }],
+      select: {
+        id: true,
+        serviceType: true,
+        scheduledAt: true,
+        amount: true,
+        currency: true,
+        status: true,
+        createdAt: true
+      }
+    }),
+    prisma.userProfileSettings.findUnique({
+      where: { userId: user.id },
+      select: {
+        defaultVehicleLabel: true
+      }
+    }),
+    findDefaultVehicleLabel(user.id).catch(() => null)
+  ]);
+
+  const vehicleLabel =
+    settings?.defaultVehicleLabel ??
+    detectedVehicleLabel ??
+    'Aucun vehicule';
+
+  return reservations.map(reservation => {
+    const serviceLabel = getReservationServiceLabel(reservation.serviceType);
+    const pricing = buildReservationInvoiceAmounts(reservation.serviceType, reservation.amount);
+    const issuedAt = reservation.createdAt.toISOString().slice(0, 10);
+    const appointmentDate = reservation.scheduledAt.toISOString().slice(0, 10);
+    const paymentStatus =
+      reservation.status === ReservationStatus.PAID ||
+      reservation.status === ReservationStatus.COMPLETED
+        ? 'paid'
+        : 'pending';
+    const paymentLabel =
+      paymentStatus === 'paid' ? 'Paiement Stripe' : 'A regler sur place';
+    const service = findReservationService(reservation.serviceType);
+    const lineItemLabel = service ? `Forfait ${service.label.toLowerCase()}` : serviceLabel;
+
+    return {
+      id: `invoice-${reservation.id}`,
+      number: buildInvoiceNumber(reservation.id, reservation.createdAt),
+      serviceLabel,
+      issuedAt,
+      appointmentDate,
+      vehicleLabel,
+      subtotalAmount: pricing.subtotalAmount,
+      taxAmount: pricing.taxAmount,
+      totalAmount: pricing.totalAmount,
+      currency: reservation.currency,
+      status: paymentStatus,
+      paymentLabel,
+      lineItems: [
+        {
+          label: lineItemLabel,
+          quantity: 1,
+          unitPrice: pricing.subtotalAmount,
+          totalPrice: pricing.subtotalAmount
+        }
+      ]
+    } satisfies InvoicePayload;
+  });
+}
+
 async function ensureStripeCustomer(profile: ProfilePayload) {
-  const paymentState = getPaymentState(profile.id);
-  if (paymentState.customerId) {
-    return paymentState.customerId;
+  const existing = await prisma.paymentMethod.findUnique({
+    where: { userId: profile.id },
+    select: {
+      stripeRef: true
+    }
+  });
+
+  if (existing?.stripeRef) {
+    return existing.stripeRef;
   }
 
   const stripe = createStripeClient();
@@ -448,96 +631,166 @@ async function ensureStripeCustomer(profile: ProfilePayload) {
     }
   });
 
-  setPaymentState(profile.id, {
-    ...paymentState,
-    customerId: customer.id
+  await prisma.paymentMethod.upsert({
+    where: { userId: profile.id },
+    update: {
+      provider: 'stripe',
+      stripeRef: customer.id
+    },
+    create: {
+      userId: profile.id,
+      provider: 'stripe',
+      status: 'not_configured',
+      stripeRef: customer.id
+    }
   });
 
   return customer.id;
 }
 
 export async function getProfile(req: Request, res: Response) {
-  res.json(await buildProfileResponse(req));
+  const authenticatedUser = await resolveProfileUser(req);
+  res.json(await buildProfileResponseForUser(authenticatedUser));
 }
 
 export async function updateProfile(req: Request, res: Response) {
-  const body = req.body as Partial<ProfilePayload>;
-  const authenticatedUser = await resolveOptionalRequestUser(req);
+  const body = (req.body ?? {}) as Partial<ProfilePayload>;
+  const authenticatedUser = await resolveProfileUser(req);
 
   if (!authenticatedUser) {
-    defaultProfileState.fullName = body.fullName ?? defaultProfileState.fullName;
-    defaultProfileState.email = body.email ?? defaultProfileState.email;
-    defaultProfileState.phone = body.phone ?? defaultProfileState.phone;
-    defaultProfileState.membershipLabel = body.membershipLabel ?? defaultProfileState.membershipLabel;
-    defaultProfileState.verified = body.verified ?? defaultProfileState.verified;
-    defaultProfileState.memberSince = body.memberSince ?? defaultProfileState.memberSince;
-    defaultProfileState.preferredGarage =
-      body.preferredGarage ?? defaultProfileState.preferredGarage;
-    defaultProfileState.defaultVehicleLabel =
-      body.defaultVehicleLabel ?? defaultProfileState.defaultVehicleLabel;
-    defaultProfileState.appointmentCount =
-      body.appointmentCount ?? defaultProfileState.appointmentCount;
-    defaultProfileState.vehicleCount = body.vehicleCount ?? defaultProfileState.vehicleCount;
-    defaultProfileState.loyaltyPoints = body.loyaltyPoints ?? defaultProfileState.loyaltyPoints;
-    defaultProfileState.addressLine = body.addressLine ?? defaultProfileState.addressLine;
-    defaultProfileState.city = body.city ?? defaultProfileState.city;
-    defaultProfileState.notes = body.notes ?? defaultProfileState.notes;
+    if (hasOwnProperty(body, 'fullName') && typeof body.fullName === 'string') {
+      defaultProfileState.fullName = body.fullName.trim() || defaultProfileState.fullName;
+    }
+    if (hasOwnProperty(body, 'email') && typeof body.email === 'string') {
+      defaultProfileState.email = body.email.trim().toLowerCase() || defaultProfileState.email;
+    }
+    if (hasOwnProperty(body, 'phone') && typeof body.phone === 'string') {
+      defaultProfileState.phone = body.phone.trim() || defaultProfileState.phone;
+    }
 
-    res.json(await buildProfileResponse(req));
+    res.json({ ...defaultProfileState });
     return;
   }
 
+  let nextUser = authenticatedUser;
+
   try {
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: authenticatedUser.id },
       data: {
-        fullName: body.fullName?.trim() || authenticatedUser.fullName,
-        email: body.email?.trim().toLowerCase() || authenticatedUser.email,
-        phone: body.phone?.trim() || authenticatedUser.phone
+        fullName:
+          typeof body.fullName === 'string' && body.fullName.trim()
+            ? body.fullName.trim()
+            : authenticatedUser.fullName,
+        email:
+          typeof body.email === 'string' && body.email.trim()
+            ? body.email.trim().toLowerCase()
+            : authenticatedUser.email,
+        phone:
+          typeof body.phone === 'string'
+            ? body.phone.trim() || null
+            : authenticatedUser.phone
+      },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        phone: true,
+        role: true,
+        createdAt: true
       }
     });
-  } catch (error) {
+
+    nextUser = toProfileUser(updatedUser);
+  } catch {
     res.status(409).json({
       message: 'Impossible de mettre a jour ce profil.'
     });
     return;
   }
 
-  const currentOverride = profileOverrides.get(authenticatedUser.id) ?? {};
-  profileOverrides.set(authenticatedUser.id, {
-    ...currentOverride,
-    membershipLabel: body.membershipLabel ?? currentOverride.membershipLabel,
-    verified: body.verified ?? currentOverride.verified,
-    memberSince: body.memberSince ?? currentOverride.memberSince,
-    preferredGarage: body.preferredGarage ?? currentOverride.preferredGarage,
-    defaultVehicleLabel: body.defaultVehicleLabel ?? currentOverride.defaultVehicleLabel,
-    loyaltyPoints: body.loyaltyPoints ?? currentOverride.loyaltyPoints,
-    addressLine: body.addressLine ?? currentOverride.addressLine,
-    city: body.city ?? currentOverride.city,
-    notes: body.notes ?? currentOverride.notes
-  });
+  const settingsData: Prisma.UserProfileSettingsUncheckedUpdateInput = {};
 
-  res.json(await buildProfileResponse(req));
+  if (hasOwnProperty(body, 'membershipLabel')) {
+    settingsData.membershipLabel = normalizeOptionalText(body.membershipLabel);
+  }
+
+  if (hasOwnProperty(body, 'verified')) {
+    settingsData.verified = typeof body.verified === 'boolean' ? body.verified : null;
+  }
+
+  if (hasOwnProperty(body, 'memberSince')) {
+    settingsData.memberSince = normalizeOptionalDate(body.memberSince);
+  }
+
+  if (hasOwnProperty(body, 'preferredGarage')) {
+    settingsData.preferredGarage = normalizeOptionalText(body.preferredGarage);
+  }
+
+  if (hasOwnProperty(body, 'defaultVehicleLabel')) {
+    settingsData.defaultVehicleLabel = normalizeOptionalText(body.defaultVehicleLabel);
+  }
+
+  if (hasOwnProperty(body, 'loyaltyPoints')) {
+    settingsData.loyaltyPoints = normalizeOptionalInteger(body.loyaltyPoints);
+  }
+
+  if (hasOwnProperty(body, 'addressLine')) {
+    settingsData.addressLine = normalizeOptionalText(body.addressLine);
+  }
+
+  if (hasOwnProperty(body, 'city')) {
+    settingsData.city = normalizeOptionalText(body.city);
+  }
+
+  if (hasOwnProperty(body, 'notes')) {
+    settingsData.notes = normalizeOptionalText(body.notes);
+  }
+
+  if (Object.keys(settingsData).length > 0) {
+    await prisma.userProfileSettings.upsert({
+      where: { userId: nextUser.id },
+      update: settingsData,
+      create: {
+        userId: nextUser.id,
+        membershipLabel: settingsData.membershipLabel as string | null | undefined,
+        verified: settingsData.verified as boolean | null | undefined,
+        memberSince: settingsData.memberSince as Date | null | undefined,
+        preferredGarage: settingsData.preferredGarage as string | null | undefined,
+        defaultVehicleLabel: settingsData.defaultVehicleLabel as string | null | undefined,
+        loyaltyPoints: settingsData.loyaltyPoints as number | null | undefined,
+        addressLine: settingsData.addressLine as string | null | undefined,
+        city: settingsData.city as string | null | undefined,
+        notes: settingsData.notes as string | null | undefined
+      }
+    });
+  }
+
+  res.json(await buildProfileResponseForUser(nextUser));
 }
 
 export async function getPaymentMethod(req: Request, res: Response) {
-  const profile = await buildProfileResponse(req);
-  res.json(getPaymentSummary(profile.id));
+  const authenticatedUser = await resolveProfileUser(req);
+  res.json(await getPaymentSummaryForUser(authenticatedUser?.id));
 }
 
 export async function listInvoices(req: Request, res: Response) {
-  const authenticatedUser = await resolveOptionalRequestUser(req);
-  const invoices = authenticatedUser
-    ? getUserInvoices(authenticatedUser.id, authenticatedUser.email)
-    : demoInvoices;
+  const authenticatedUser = await resolveProfileUser(req);
+
+  if (!authenticatedUser) {
+    res.json(getInvoiceSummaries(defaultInvoices.map(cloneInvoice)));
+    return;
+  }
+
+  const invoices = await buildInvoicesForUser(authenticatedUser);
   res.json(getInvoiceSummaries(invoices));
 }
 
 export async function downloadInvoicePdf(req: Request, res: Response) {
-  const authenticatedUser = await resolveOptionalRequestUser(req);
+  const authenticatedUser = await resolveProfileUser(req);
   const invoices = authenticatedUser
-    ? getUserInvoices(authenticatedUser.id, authenticatedUser.email)
-    : demoInvoices;
+    ? await buildInvoicesForUser(authenticatedUser)
+    : defaultInvoices.map(cloneInvoice);
   const invoice = findInvoiceById(invoices, req.params.invoiceId);
 
   if (!invoice) {
@@ -546,8 +799,14 @@ export async function downloadInvoicePdf(req: Request, res: Response) {
     });
   }
 
-  const profile = await buildProfileResponse(req);
-  const pdfBuffer = buildInvoicePdf(invoice, profile, getPaymentSummary(profile.id));
+  const profile = authenticatedUser
+    ? await buildProfileResponseForUser(authenticatedUser)
+    : { ...defaultProfileState };
+  const pdfBuffer = buildInvoicePdf(
+    invoice,
+    profile,
+    await getPaymentSummaryForUser(authenticatedUser?.id)
+  );
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${invoice.number}.pdf"`);
   return res.send(pdfBuffer);
@@ -561,8 +820,14 @@ export async function createPaymentCheckoutSession(req: Request, res: Response) 
       });
     }
 
-    const profile = await buildProfileResponse(req);
-    const paymentState = getPaymentState(profile.id);
+    const authenticatedUser = await resolveProfileUser(req);
+    if (!authenticatedUser) {
+      return res.status(401).json({
+        message: 'Authentification requise.'
+      });
+    }
+
+    const profile = await buildProfileResponseForUser(authenticatedUser);
     const stripe = createStripeClient();
     const customerId = await ensureStripeCustomer(profile);
     const session = await stripe.checkout.sessions.create({
@@ -582,12 +847,23 @@ export async function createPaymentCheckoutSession(req: Request, res: Response) 
       });
     }
 
-    setPaymentState(profile.id, {
-      ...paymentState,
-      status: 'pending',
-      customerId,
-      lastCheckoutSessionId: session.id,
-      lastSyncAt: new Date().toISOString()
+    await prisma.paymentMethod.upsert({
+      where: { userId: profile.id },
+      update: {
+        provider: 'stripe',
+        status: 'pending',
+        stripeRef: customerId,
+        lastCheckoutSessionId: session.id,
+        lastSyncAt: new Date()
+      },
+      create: {
+        userId: profile.id,
+        provider: 'stripe',
+        status: 'pending',
+        stripeRef: customerId,
+        lastCheckoutSessionId: session.id,
+        lastSyncAt: new Date()
+      }
     });
 
     return res.status(201).json({
@@ -611,11 +887,19 @@ export async function syncPaymentMethod(req: Request, res: Response) {
       });
     }
 
-    const profile = await buildProfileResponse(req);
-    const paymentState = getPaymentState(profile.id);
-    const stripe = createStripeClient();
+    const authenticatedUser = await resolveProfileUser(req);
+    if (!authenticatedUser) {
+      return res.status(401).json({
+        message: 'Authentification requise.'
+      });
+    }
+
+    const existingState = await prisma.paymentMethod.findUnique({
+      where: { userId: authenticatedUser.id }
+    });
+
     const requestedSessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : null;
-    const sessionId = requestedSessionId || paymentState.lastCheckoutSessionId;
+    const sessionId = requestedSessionId || existingState?.lastCheckoutSessionId;
 
     if (!sessionId) {
       return res.status(400).json({
@@ -623,31 +907,67 @@ export async function syncPaymentMethod(req: Request, res: Response) {
       });
     }
 
+    const stripe = createStripeClient();
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['setup_intent.payment_method', 'customer']
     });
 
+    const customerId =
+      typeof session.customer === 'string'
+        ? session.customer
+        : session.customer?.id ?? existingState?.stripeRef ?? null;
+
+    if (!customerId) {
+      return res.status(400).json({
+        message: 'No Stripe customer is associated with this session'
+      });
+    }
+
     if (session.status !== 'complete') {
-      setPaymentState(profile.id, {
-        ...paymentState,
-        status: 'pending',
-        lastCheckoutSessionId: session.id,
-        lastSyncAt: new Date().toISOString()
+      await prisma.paymentMethod.upsert({
+        where: { userId: authenticatedUser.id },
+        update: {
+          provider: 'stripe',
+          status: 'pending',
+          stripeRef: customerId,
+          lastCheckoutSessionId: session.id,
+          lastSyncAt: new Date()
+        },
+        create: {
+          userId: authenticatedUser.id,
+          provider: 'stripe',
+          status: 'pending',
+          stripeRef: customerId,
+          lastCheckoutSessionId: session.id,
+          lastSyncAt: new Date()
+        }
       });
 
-      return res.status(202).json(getPaymentSummary(profile.id));
+      return res.status(202).json(await getPaymentSummaryForUser(authenticatedUser.id));
     }
 
     const setupIntent = session.setup_intent;
     if (!setupIntent || typeof setupIntent === 'string') {
-      setPaymentState(profile.id, {
-        ...paymentState,
-        status: 'pending',
-        lastCheckoutSessionId: session.id,
-        lastSyncAt: new Date().toISOString()
+      await prisma.paymentMethod.upsert({
+        where: { userId: authenticatedUser.id },
+        update: {
+          provider: 'stripe',
+          status: 'pending',
+          stripeRef: customerId,
+          lastCheckoutSessionId: session.id,
+          lastSyncAt: new Date()
+        },
+        create: {
+          userId: authenticatedUser.id,
+          provider: 'stripe',
+          status: 'pending',
+          stripeRef: customerId,
+          lastCheckoutSessionId: session.id,
+          lastSyncAt: new Date()
+        }
       });
 
-      return res.status(202).json(getPaymentSummary(profile.id));
+      return res.status(202).json(await getPaymentSummaryForUser(authenticatedUser.id));
     }
 
     const paymentMethod = setupIntent.payment_method;
@@ -657,39 +977,56 @@ export async function syncPaymentMethod(req: Request, res: Response) {
       paymentMethod.type !== 'card' ||
       !paymentMethod.card
     ) {
-      setPaymentState(profile.id, {
-        ...paymentState,
-        status: 'pending',
-        lastCheckoutSessionId: session.id,
-        lastSyncAt: new Date().toISOString()
+      await prisma.paymentMethod.upsert({
+        where: { userId: authenticatedUser.id },
+        update: {
+          provider: 'stripe',
+          status: 'pending',
+          stripeRef: customerId,
+          lastCheckoutSessionId: session.id,
+          lastSyncAt: new Date()
+        },
+        create: {
+          userId: authenticatedUser.id,
+          provider: 'stripe',
+          status: 'pending',
+          stripeRef: customerId,
+          lastCheckoutSessionId: session.id,
+          lastSyncAt: new Date()
+        }
       });
 
-      return res.status(202).json(getPaymentSummary(profile.id));
+      return res.status(202).json(await getPaymentSummaryForUser(authenticatedUser.id));
     }
 
-    const customerId =
-      typeof session.customer === 'string'
-        ? session.customer
-        : session.customer?.id ?? paymentState.customerId;
-
-    setPaymentState(profile.id, {
-      provider: 'stripe',
-      status: 'ready',
-      backendReachable: true,
-      stripeConfigured: true,
-      customerId,
-      card: {
+    await prisma.paymentMethod.upsert({
+      where: { userId: authenticatedUser.id },
+      update: {
+        provider: 'stripe',
+        status: 'ready',
+        stripeRef: customerId,
         brand: paymentMethod.card.brand,
         last4: paymentMethod.card.last4,
         expMonth: paymentMethod.card.exp_month,
-        expYear: paymentMethod.card.exp_year
+        expYear: paymentMethod.card.exp_year,
+        lastCheckoutSessionId: session.id,
+        lastSyncAt: new Date()
       },
-      lastCheckoutSessionId: session.id,
-      lastSyncAt: new Date().toISOString(),
-      message: 'Carte Stripe synchronisee et prete pour les prochains paiements.'
+      create: {
+        userId: authenticatedUser.id,
+        provider: 'stripe',
+        status: 'ready',
+        stripeRef: customerId,
+        brand: paymentMethod.card.brand,
+        last4: paymentMethod.card.last4,
+        expMonth: paymentMethod.card.exp_month,
+        expYear: paymentMethod.card.exp_year,
+        lastCheckoutSessionId: session.id,
+        lastSyncAt: new Date()
+      }
     });
 
-    return res.json(getPaymentSummary(profile.id));
+    return res.json(await getPaymentSummaryForUser(authenticatedUser.id));
   } catch (error) {
     logger.error({ err: error }, 'Stripe payment method sync failed');
     return res.status(502).json({
