@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc -p .",
+    "test:build": "tsc -p tsconfig.test.json",
+    "test": "npm run test:build && node --test dist-test/tests/*.test.js",
     "start": "node dist/server.js",
     "lint": "eslint .",
     "prisma:migrate": "prisma migrate dev",

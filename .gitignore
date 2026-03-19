@@ -32,6 +32,7 @@ typings/
 # Backend / Node
 backend/node_modules/
 backend/dist/
+backend/dist-test/
 backend/.env
 backend/.env.*
 frontend/.env
