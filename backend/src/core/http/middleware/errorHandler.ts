@@ -6,10 +6,11 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
   const status = err instanceof AppError ? err.status : 500;
   logger.error(
     {
+      err,
       method: req.method,
-      url: req.url,
-      status,
-      stack: err.stack
+      url: req.originalUrl || req.url,
+      statusCode: status,
+      userId: typeof res.locals.authUser?.id === 'string' ? res.locals.authUser.id : undefined
     },
     'http error'
   );

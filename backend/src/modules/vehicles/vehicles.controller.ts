@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
+import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 
 interface VehicleResponse {
@@ -207,12 +208,15 @@ async function readVehicleCatalog(userId: string) {
   try {
     return await readCurrentVehicles(userId);
   } catch (currentSchemaError) {
-    console.warn('Falling back to legacy vehicle schema:', currentSchemaError);
+    logger.warn({ err: currentSchemaError, userId }, 'Falling back to legacy vehicle schema');
 
     try {
       return await readLegacyVehicles(userId);
     } catch (legacySchemaError) {
-      console.error('Unable to read vehicles from current or legacy schema:', legacySchemaError);
+      logger.error(
+        { err: legacySchemaError, userId },
+        'Unable to read vehicles from current or legacy schema'
+      );
       return [];
     }
   }
@@ -353,12 +357,15 @@ export async function createVehicle(req: Request, res: Response) {
   try {
     res.status(201).json(await createCurrentVehicle(userId, payload));
   } catch (currentSchemaError) {
-    console.warn('Falling back to legacy vehicle create:', currentSchemaError);
+    logger.warn({ err: currentSchemaError, userId }, 'Falling back to legacy vehicle create');
 
     try {
       res.status(201).json(await createLegacyVehicle(userId, payload));
     } catch (legacySchemaError) {
-      console.error('Error creating vehicle in current and legacy schemas:', legacySchemaError);
+      logger.error(
+        { err: legacySchemaError, userId },
+        'Error creating vehicle in current and legacy schemas'
+      );
       res.status(503).json({ message: 'Vehicle write operations are not available on this deployment.' });
     }
   }
@@ -391,12 +398,18 @@ export async function updateVehicle(req: Request, res: Response) {
 
     res.json(await updateCurrentVehicle(id, payload));
   } catch (currentSchemaError) {
-    console.warn(`Falling back to legacy vehicle update for ${id}:`, currentSchemaError);
+    logger.warn(
+      { err: currentSchemaError, userId, vehicleId: id },
+      'Falling back to legacy vehicle update'
+    );
 
     try {
       res.json(await updateLegacyVehicle(userId, id, payload));
     } catch (legacySchemaError) {
-      console.error(`Error updating vehicle ${id} in current and legacy schemas:`, legacySchemaError);
+      logger.error(
+        { err: legacySchemaError, userId, vehicleId: id },
+        'Error updating vehicle in current and legacy schemas'
+      );
       res.status(503).json({ message: 'Vehicle write operations are not available on this deployment.' });
     }
   }
@@ -416,7 +429,10 @@ export async function deleteVehicle(req: Request, res: Response) {
     await prisma.vehicle.delete({ where: { id } });
     res.status(204).end();
   } catch (currentSchemaError) {
-    console.warn(`Falling back to legacy vehicle delete for ${id}:`, currentSchemaError);
+    logger.warn(
+      { err: currentSchemaError, userId, vehicleId: id },
+      'Falling back to legacy vehicle delete'
+    );
 
     try {
       const deleted = await deleteLegacyVehicle(userId, id);
@@ -426,7 +442,10 @@ export async function deleteVehicle(req: Request, res: Response) {
       }
       res.status(204).end();
     } catch (legacySchemaError) {
-      console.error(`Error deleting vehicle ${id} in current and legacy schemas:`, legacySchemaError);
+      logger.error(
+        { err: legacySchemaError, userId, vehicleId: id },
+        'Error deleting vehicle in current and legacy schemas'
+      );
       res.status(503).json({ message: 'Vehicle delete is not available on this deployment.' });
     }
   }
@@ -450,7 +469,7 @@ export async function getMaintenanceHistory(req: Request, res: Response) {
 
     res.json(records);
   } catch (error) {
-    console.warn(`Maintenance history unavailable for vehicle ${id}:`, error);
+    logger.warn({ err: error, userId, vehicleId: id }, 'Maintenance history unavailable');
     res.json([]);
   }
 }
@@ -473,7 +492,7 @@ export async function getVehicleDocuments(req: Request, res: Response) {
 
     res.json(documents);
   } catch (error) {
-    console.warn(`Vehicle documents unavailable for vehicle ${id}:`, error);
+    logger.warn({ err: error, userId, vehicleId: id }, 'Vehicle documents unavailable');
     res.json([]);
   }
 }
@@ -504,7 +523,7 @@ export async function getVehicleInsurance(req: Request, res: Response) {
       endDate: normalizeDate(insurance.endDate)
     });
   } catch (error) {
-    console.warn(`Vehicle insurance unavailable for vehicle ${id}:`, error);
+    logger.warn({ err: error, userId, vehicleId: id }, 'Vehicle insurance unavailable');
     res.status(404).json({ message: 'Insurance not found' });
   }
 }

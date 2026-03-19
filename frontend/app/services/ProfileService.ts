@@ -1,5 +1,6 @@
 import { apiRequest } from '@/utils/api'
 import { readStoredSession } from '@/utils/authStorage'
+import ReservationService from '@/services/ReservationService'
 import type {
   PaymentMethodSummary,
   StripeCheckoutSessionResponse,
@@ -71,6 +72,27 @@ function clonePayment(payment: PaymentMethodSummary): PaymentMethodSummary {
   }
 }
 
+async function syncAppointmentCount(profile: UserProfile): Promise<UserProfile> {
+  if (profile.appointmentCount > 0) {
+    return cloneProfile(profile)
+  }
+
+  try {
+    const reservations = await ReservationService.getMyReservations()
+    if (reservations.length === 0) {
+      return cloneProfile(profile)
+    }
+
+    return {
+      ...profile,
+      appointmentCount: reservations.length
+    }
+  } catch (error) {
+    console.warn('Error syncing profile appointment count:', error)
+    return cloneProfile(profile)
+  }
+}
+
 class ProfileService {
   getFallbackProfile(): UserProfile {
     syncFallbackProfileIdentity()
@@ -90,8 +112,9 @@ class ProfileService {
     profileRequest = (async () => {
       try {
         const profile = await apiRequest<UserProfile>('/profile', { timeoutMs: PROFILE_TIMEOUT_MS })
-        fallbackProfileState = cloneProfile(profile)
-        return cloneProfile(profile)
+        const synchronizedProfile = await syncAppointmentCount(profile)
+        fallbackProfileState = cloneProfile(synchronizedProfile)
+        return cloneProfile(synchronizedProfile)
       } catch (error) {
         console.warn('Error fetching profile:', error)
         return this.getFallbackProfile()

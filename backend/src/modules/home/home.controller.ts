@@ -1,5 +1,6 @@
 import { ReservationStatus } from '@prisma/client';
 import { Request, Response } from 'express';
+import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { resolveOptionalRequestUser } from '../auth/auth.service';
 
@@ -161,7 +162,7 @@ export async function getHomeFeed(req: Request, res: Response) {
       reminderMessage
     } satisfies HomeFeedPayload);
   } catch (error) {
-    console.error('Error building home feed:', error);
+    logger.error({ err: error }, 'Error building home feed');
     const displayName = getFirstName(undefined);
     res.json(buildDefaultFeed(displayName));
   }

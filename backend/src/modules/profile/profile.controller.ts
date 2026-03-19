@@ -1,9 +1,11 @@
 import { Role } from '@prisma/client';
 import { Request, Response } from 'express';
 import { env } from '../../config/env';
+import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { createStripeClient } from '../../data/stripe/stripeClient';
 import { resolveOptionalRequestUser } from '../auth/auth.service';
+import { getReservationCount } from '../reservations/reservations.controller';
 
 interface ProfilePayload {
   id: string;
@@ -325,13 +327,18 @@ async function buildProfileResponse(req: Request): Promise<ProfilePayload> {
   const authenticatedUser = await resolveOptionalRequestUser(req);
   const userId = authenticatedUser?.id ?? defaultProfileState.id;
   const override = authenticatedUser ? profileOverrides.get(userId) ?? {} : {};
+  const canUseReservationFallback =
+    !authenticatedUser || authenticatedUser.email === defaultProfileState.email;
+  const fallbackAppointmentCount = canUseReservationFallback
+    ? Math.max(getReservationCount(), defaultProfileState.appointmentCount)
+    : 0;
 
   const [vehicleCount, appointmentCount, defaultVehicle] = await Promise.all([
     prisma.vehicle.count({ where: { userId } }).catch(() =>
       authenticatedUser ? 0 : defaultProfileState.vehicleCount
     ),
     prisma.reservation.count({ where: { userId } }).catch(() =>
-      authenticatedUser ? 0 : defaultProfileState.appointmentCount
+      authenticatedUser ? 0 : fallbackAppointmentCount
     ),
     prisma.vehicle
       .findFirst({
@@ -340,12 +347,14 @@ async function buildProfileResponse(req: Request): Promise<ProfilePayload> {
       })
       .catch(() => null)
   ]);
+  const resolvedAppointmentCount =
+    appointmentCount > 0 ? appointmentCount : fallbackAppointmentCount;
 
   if (!authenticatedUser) {
     return {
       ...defaultProfileState,
       vehicleCount: vehicleCount > 0 ? vehicleCount : defaultProfileState.vehicleCount,
-      appointmentCount: appointmentCount > 0 ? appointmentCount : defaultProfileState.appointmentCount
+      appointmentCount: resolvedAppointmentCount
     };
   }
 
@@ -361,9 +370,9 @@ async function buildProfileResponse(req: Request): Promise<ProfilePayload> {
     defaultVehicleLabel:
       override.defaultVehicleLabel ??
       (defaultVehicle ? `${defaultVehicle.name} ${defaultVehicle.model}` : 'Aucun vehicule'),
-    appointmentCount,
+    appointmentCount: resolvedAppointmentCount,
     vehicleCount,
-    loyaltyPoints: override.loyaltyPoints ?? appointmentCount * 60 + vehicleCount * 30,
+    loyaltyPoints: override.loyaltyPoints ?? resolvedAppointmentCount * 60 + vehicleCount * 30,
     addressLine: override.addressLine ?? 'Adresse a completer',
     city: override.city ?? 'Montreal, QC',
     notes: override.notes ?? 'Compte client connecte via authentification backend.'
@@ -526,7 +535,7 @@ export async function createPaymentCheckoutSession(req: Request, res: Response) 
       mode: 'setup'
     });
   } catch (error) {
-    console.error('Stripe checkout session creation failed:', error);
+    logger.error({ err: error }, 'Stripe checkout session creation failed');
     return res.status(502).json({
       message: error instanceof Error ? error.message : 'Stripe checkout session creation failed'
     });
@@ -621,7 +630,7 @@ export async function syncPaymentMethod(req: Request, res: Response) {
 
     return res.json(getPaymentSummary(profile.id));
   } catch (error) {
-    console.error('Stripe payment method sync failed:', error);
+    logger.error({ err: error }, 'Stripe payment method sync failed');
     return res.status(502).json({
       message: error instanceof Error ? error.message : 'Stripe payment method sync failed'
     });

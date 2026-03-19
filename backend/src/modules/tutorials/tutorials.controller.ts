@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 
 type TutorialCategory =
@@ -258,12 +259,15 @@ async function readTutorialCatalog() {
   try {
     return await readCurrentTutorials();
   } catch (currentSchemaError) {
-    console.warn('Falling back to legacy tutorial schema:', currentSchemaError);
+    logger.warn({ err: currentSchemaError }, 'Falling back to legacy tutorial schema');
 
     try {
       return await readLegacyTutorials();
     } catch (legacySchemaError) {
-      console.error('Unable to read tutorials from current or legacy schema:', legacySchemaError);
+      logger.error(
+        { err: legacySchemaError },
+        'Unable to read tutorials from current or legacy schema'
+      );
       return FALLBACK_TUTORIALS.map(cloneTutorial);
     }
   }
@@ -298,7 +302,7 @@ export async function createTutorial(req: Request, res: Response) {
       difficulty: String(tutorial.difficulty)
     }));
   } catch (error) {
-    console.error('Error creating tutorial:', error);
+    logger.error({ err: error }, 'Error creating tutorial');
     res.status(503).json({ message: 'Tutorial write operations are not available on this deployment.' });
   }
 }
@@ -343,7 +347,7 @@ export async function updateTutorial(req: Request, res: Response) {
       difficulty: String(tutorial.difficulty)
     }));
   } catch (error) {
-    console.error(`Error updating tutorial ${id}:`, error);
+    logger.error({ err: error, tutorialId: id }, 'Error updating tutorial');
     res.status(503).json({ message: 'Tutorial write operations are not available on this deployment.' });
   }
 }
@@ -355,7 +359,7 @@ export async function deleteTutorial(req: Request, res: Response) {
     await prisma.tutorial.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
-    console.error(`Error deleting tutorial ${id}:`, error);
+    logger.error({ err: error, tutorialId: id }, 'Error deleting tutorial');
     res.status(503).json({ message: 'Tutorial delete is not available on this deployment.' });
   }
 }
@@ -395,7 +399,7 @@ export async function incrementTutorialViews(req: Request, res: Response) {
       data: { views: { increment: 1 } }
     });
   } catch (error) {
-    console.warn(`Tutorial views increment skipped for ${id}:`, error);
+    logger.warn({ err: error, tutorialId: id }, 'Tutorial views increment skipped');
   }
 
   res.status(204).end();
@@ -417,7 +421,7 @@ export async function rateTutorial(req: Request, res: Response) {
       difficulty: String(tutorial.difficulty)
     }));
   } catch (error) {
-    console.error(`Error rating tutorial ${id}:`, error);
+    logger.error({ err: error, tutorialId: id }, 'Error rating tutorial');
     res.status(503).json({ message: 'Tutorial rating is not available on this deployment.' });
   }
 }

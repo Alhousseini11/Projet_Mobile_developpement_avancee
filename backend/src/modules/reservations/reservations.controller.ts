@@ -79,6 +79,10 @@ const reservations: ReservationRecord[] = [
   }
 ];
 
+export function getReservationCount() {
+  return reservations.length;
+}
+
 function serializeReservation(reservation: ReservationRecord) {
   return {
     ...reservation,
