@@ -11,6 +11,20 @@ interface HomeFeedPayload {
   reminderMessage: string;
 }
 
+interface HomeVehicleRecord {
+  id: string;
+  name: string;
+  model: string;
+  mileage: number | null;
+}
+
+interface LegacyHomeVehicleRow {
+  id: string;
+  brand: string;
+  model: string;
+  mileage: number | null;
+}
+
 const DEFAULT_PROMO_MESSAGE = 'Promos: 20% sur les freins cette semaine.';
 
 function getFirstName(fullName?: string | null) {
@@ -85,19 +99,11 @@ function buildReminderMessage(params: {
   return 'Rappel: Consultez vos vehicules pour planifier votre prochain entretien.';
 }
 
-export async function getHomeFeed(req: Request, res: Response) {
+async function readNextReservation(userId: string) {
   try {
-    const authenticatedUser = await resolveOptionalRequestUser(req);
-    const displayName = getFirstName(authenticatedUser?.fullName);
-
-    if (!authenticatedUser) {
-      res.json(buildDefaultFeed(displayName));
-      return;
-    }
-
-    const nextReservation = await prisma.reservation.findFirst({
+    return await prisma.reservation.findFirst({
       where: {
-        userId: authenticatedUser.id,
+        userId,
         status: {
           in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED, ReservationStatus.PAID]
         },
@@ -113,9 +119,16 @@ export async function getHomeFeed(req: Request, res: Response) {
         scheduledAt: true
       }
     });
+  } catch (error) {
+    logger.warn({ err: error, userId }, 'Unable to load reservation context for home feed');
+    return null;
+  }
+}
 
-    const primaryVehicle = await prisma.vehicle.findFirst({
-      where: { userId: authenticatedUser.id },
+async function readPrimaryVehicle(userId: string): Promise<HomeVehicleRecord | null> {
+  try {
+    const vehicle = await prisma.vehicle.findFirst({
+      where: { userId },
       orderBy: {
         updatedAt: 'desc'
       },
@@ -127,20 +140,79 @@ export async function getHomeFeed(req: Request, res: Response) {
       }
     });
 
-    const nextReminder = primaryVehicle
-      ? await prisma.reminder.findFirst({
-          where: {
-            vehicleId: primaryVehicle.id
-          },
-          orderBy: {
-            dueAt: 'asc'
-          },
-          select: {
-            title: true,
-            dueAt: true
-          }
-        })
-      : null;
+    if (!vehicle) {
+      return null;
+    }
+
+    return {
+      id: vehicle.id,
+      name: vehicle.name,
+      model: vehicle.model,
+      mileage: vehicle.mileage
+    };
+  } catch (currentSchemaError) {
+    logger.warn({ err: currentSchemaError, userId }, 'Falling back to legacy home vehicle schema');
+
+    try {
+      const vehicles = await prisma.$queryRaw<LegacyHomeVehicleRow[]>`
+        SELECT "id", "brand", "model", "mileage"
+        FROM "Vehicle"
+        WHERE "userId" = ${userId}
+        ORDER BY "id" DESC
+        LIMIT 1
+      `;
+
+      const vehicle = vehicles[0];
+      if (!vehicle) {
+        return null;
+      }
+
+      return {
+        id: vehicle.id,
+        name: vehicle.brand,
+        model: vehicle.model,
+        mileage: vehicle.mileage
+      };
+    } catch (legacySchemaError) {
+      logger.warn({ err: legacySchemaError, userId }, 'Unable to load vehicle context for home feed');
+      return null;
+    }
+  }
+}
+
+async function readNextReminder(vehicleId: string) {
+  try {
+    return await prisma.reminder.findFirst({
+      where: {
+        vehicleId
+      },
+      orderBy: {
+        dueAt: 'asc'
+      },
+      select: {
+        title: true,
+        dueAt: true
+      }
+    });
+  } catch (error) {
+    logger.warn({ err: error, vehicleId }, 'Unable to load reminder for home feed');
+    return null;
+  }
+}
+
+export async function getHomeFeed(req: Request, res: Response) {
+  try {
+    const authenticatedUser = await resolveOptionalRequestUser(req);
+    const displayName = getFirstName(authenticatedUser?.fullName);
+
+    if (!authenticatedUser) {
+      res.json(buildDefaultFeed(displayName));
+      return;
+    }
+
+    const nextReservation = await readNextReservation(authenticatedUser.id);
+    const primaryVehicle = await readPrimaryVehicle(authenticatedUser.id);
+    const nextReminder = primaryVehicle ? await readNextReminder(primaryVehicle.id) : null;
 
     const fallbackFeed = buildDefaultFeed(displayName);
     const nextAppointmentLabel = nextReservation
