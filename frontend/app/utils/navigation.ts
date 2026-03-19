@@ -15,6 +15,7 @@ export type AppPage =
   | 'vehicleDetails'
   | 'addVehicle'
   | 'paymentMethods'
+  | 'reviews'
   | 'profile'
 
 interface NavigationOptions {
@@ -46,6 +47,7 @@ const pageRegistry: Record<AppPage, () => PageModule | unknown> = {
   vehicleDetails: () => require('@/components/VehicleDetails.vue'),
   addVehicle: () => require('@/components/AddVehicle.vue'),
   paymentMethods: () => require('@/components/PaymentMethods.vue'),
+  reviews: () => require('@/components/Reviews.vue'),
   profile: () => require('@/components/Profile.vue')
 }
 

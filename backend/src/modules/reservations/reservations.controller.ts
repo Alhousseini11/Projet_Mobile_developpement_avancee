@@ -12,7 +12,7 @@ interface ReservationServiceOption {
   price: number;
 }
 
-interface ReservationRecord {
+export interface ReservationRecord {
   id: string;
   userId: string;
   serviceId: string;
@@ -112,6 +112,22 @@ function getUserReservations(userId: string, email?: string | null) {
     email === DEMO_ACCOUNT_EMAIL ? createDemoReservations(userId) : [];
   reservationsByUser.set(userId, initialReservations);
   return initialReservations;
+}
+
+export function listReservationsForUser(userId: string, email?: string | null) {
+  if (!userId) {
+    return [] as ReservationRecord[];
+  }
+
+  return [...getUserReservations(userId, email)];
+}
+
+export function findReservationForUser(
+  userId: string,
+  reservationId: string,
+  email?: string | null
+) {
+  return getUserReservations(userId, email).find(item => item.id === reservationId) ?? null;
 }
 
 function getAllReservations() {

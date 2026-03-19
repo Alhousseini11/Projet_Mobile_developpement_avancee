@@ -193,7 +193,8 @@ const supportItems: ProfileItem[] = [
     id: 'reviews',
     label: 'Avis et evaluations',
     description: 'Partager votre retour sur les interventions du garage.',
-    badge: 'AV'
+    badge: 'AV',
+    page: 'reviews'
   },
   {
     id: 'support',
