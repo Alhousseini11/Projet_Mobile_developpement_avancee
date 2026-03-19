@@ -154,16 +154,7 @@ class VehicleService {
       return this.normalizeVehicle(created)
     } catch (error) {
       console.error('Error creating vehicle:', error)
-      // fallback local mock creation
-      const newVehicle: Vehicle = {
-        id: (MOCK_VEHICLES.length + 1).toString(),
-        userId: MOCK_USER_ID,
-        ...data,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-      MOCK_VEHICLES.push(newVehicle)
-      return newVehicle
+      throw error
     }
   }
 
@@ -176,11 +167,6 @@ class VehicleService {
       return this.normalizeVehicle(updated)
     } catch (error) {
       console.error('Error updating vehicle:', error)
-      const idx = MOCK_VEHICLES.findIndex(v => v.id === vehicleId)
-      if (idx > -1) {
-        MOCK_VEHICLES[idx] = { ...MOCK_VEHICLES[idx], ...data, updatedAt: new Date() }
-        return MOCK_VEHICLES[idx]
-      }
       throw error
     }
   }
@@ -190,12 +176,6 @@ class VehicleService {
       await apiRequest<void>(`/vehicles/${vehicleId}`, { method: 'DELETE' })
     } catch (error) {
       console.error('Error deleting vehicle:', error)
-      // fallback delete mock
-      const vehicleIndex = MOCK_VEHICLES.findIndex(v => v.id === vehicleId)
-      if (vehicleIndex > -1) {
-        MOCK_VEHICLES.splice(vehicleIndex, 1)
-        return
-      }
       throw error
     }
   }

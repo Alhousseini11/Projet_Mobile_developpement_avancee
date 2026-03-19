@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
 import { prisma } from '../../data/prisma/client';
 
@@ -25,8 +26,48 @@ interface LegacyVehicleRow {
   mileage: number | null;
 }
 
+interface VehicleWritePayload {
+  name: string;
+  model: string;
+  year: number;
+  mileage: number;
+  type: VehicleResponse['type'];
+  licensePlate: string | null;
+  fuelType: string | null;
+  vin: string | null;
+  color: string | null;
+}
+
 function getAuthenticatedUserId(res: Response) {
   return String(res.locals.authUser?.id ?? '');
+}
+
+function normalizeText(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeRequiredText(value: unknown, fallback = 'Vehicule') {
+  return normalizeText(value) ?? fallback;
+}
+
+function normalizeNumber(value: unknown, fallback = 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
 }
 
 function normalizeDate(value?: Date | string | null) {
@@ -111,6 +152,20 @@ function normalizeVehicleType(value: string | null | undefined): VehicleResponse
   }
 }
 
+function buildVehicleWritePayload(data: any): VehicleWritePayload {
+  return {
+    name: normalizeRequiredText(data?.name),
+    model: normalizeRequiredText(data?.model, 'Modele'),
+    year: normalizeNumber(data?.year, new Date().getFullYear()),
+    mileage: normalizeNumber(data?.mileage, 0),
+    type: normalizeVehicleType(typeof data?.type === 'string' ? data.type : undefined),
+    licensePlate: normalizeText(data?.licensePlate),
+    fuelType: normalizeText(data?.fuelType),
+    vin: normalizeText(data?.vin),
+    color: normalizeText(data?.color)
+  };
+}
+
 async function readCurrentVehicles(userId: string) {
   const vehicles = await prisma.vehicle.findMany({
     where: { userId },
@@ -168,6 +223,124 @@ async function findVehicleById(userId: string, vehicleId: string) {
   return vehicles.find(vehicle => vehicle.id === vehicleId) ?? null;
 }
 
+async function createCurrentVehicle(userId: string, payload: VehicleWritePayload) {
+  const vehicle = await prisma.vehicle.create({
+    data: {
+      userId,
+      name: payload.name,
+      model: payload.model,
+      year: payload.year,
+      mileage: payload.mileage,
+      type: payload.type,
+      licensePlate: payload.licensePlate,
+      fuelType: payload.fuelType,
+      vin: payload.vin,
+      color: payload.color
+    },
+    select: {
+      id: true,
+      userId: true,
+      name: true,
+      model: true,
+      year: true,
+      mileage: true,
+      type: true,
+      licensePlate: true,
+      fuelType: true,
+      color: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
+
+  return mapCurrentVehicle({
+    ...vehicle,
+    type: String(vehicle.type)
+  });
+}
+
+async function createLegacyVehicle(userId: string, payload: VehicleWritePayload) {
+  const vehicleId = randomUUID();
+  const rows = await prisma.$queryRaw<LegacyVehicleRow[]>`
+    INSERT INTO "Vehicle" ("id", "userId", "brand", "model", "year", "mileage")
+    VALUES (${vehicleId}, ${userId}, ${payload.name}, ${payload.model}, ${payload.year}, ${payload.mileage})
+    RETURNING "id", "userId", "brand", "model", "year", "mileage"
+  `;
+
+  const vehicle = rows[0];
+  if (!vehicle) {
+    throw new Error('Legacy vehicle insert returned no row.');
+  }
+
+  return mapLegacyVehicle(vehicle);
+}
+
+async function updateCurrentVehicle(vehicleId: string, payload: VehicleWritePayload) {
+  const vehicle = await prisma.vehicle.update({
+    where: { id: vehicleId },
+    data: {
+      name: payload.name,
+      model: payload.model,
+      year: payload.year,
+      mileage: payload.mileage,
+      type: payload.type,
+      licensePlate: payload.licensePlate,
+      fuelType: payload.fuelType,
+      vin: payload.vin,
+      color: payload.color
+    },
+    select: {
+      id: true,
+      userId: true,
+      name: true,
+      model: true,
+      year: true,
+      mileage: true,
+      type: true,
+      licensePlate: true,
+      fuelType: true,
+      color: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
+
+  return mapCurrentVehicle({
+    ...vehicle,
+    type: String(vehicle.type)
+  });
+}
+
+async function updateLegacyVehicle(userId: string, vehicleId: string, payload: VehicleWritePayload) {
+  const rows = await prisma.$queryRaw<LegacyVehicleRow[]>`
+    UPDATE "Vehicle"
+    SET
+      "brand" = ${payload.name},
+      "model" = ${payload.model},
+      "year" = ${payload.year},
+      "mileage" = ${payload.mileage}
+    WHERE "id" = ${vehicleId} AND "userId" = ${userId}
+    RETURNING "id", "userId", "brand", "model", "year", "mileage"
+  `;
+
+  const vehicle = rows[0];
+  if (!vehicle) {
+    throw new Error('Legacy vehicle update returned no row.');
+  }
+
+  return mapLegacyVehicle(vehicle);
+}
+
+async function deleteLegacyVehicle(userId: string, vehicleId: string) {
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    DELETE FROM "Vehicle"
+    WHERE "id" = ${vehicleId} AND "userId" = ${userId}
+    RETURNING "id"
+  `;
+
+  return rows.length > 0;
+}
+
 export async function listVehicles(_req: Request, res: Response) {
   const userId = getAuthenticatedUserId(res);
   res.json(await readVehicleCatalog(userId));
@@ -175,45 +348,19 @@ export async function listVehicles(_req: Request, res: Response) {
 
 export async function createVehicle(req: Request, res: Response) {
   const userId = getAuthenticatedUserId(res);
-  const data = req.body;
+  const payload = buildVehicleWritePayload(req.body);
 
   try {
-    const vehicle = await prisma.vehicle.create({
-      data: {
-        userId,
-        name: data.name,
-        model: data.model,
-        year: data.year,
-        mileage: data.mileage,
-        type: data.type,
-        licensePlate: data.licensePlate ?? null,
-        fuelType: data.fuelType ?? null,
-        vin: data.vin ?? null,
-        color: data.color ?? null
-      },
-      select: {
-        id: true,
-        userId: true,
-        name: true,
-        model: true,
-        year: true,
-        mileage: true,
-        type: true,
-        licensePlate: true,
-        fuelType: true,
-        color: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    });
+    res.status(201).json(await createCurrentVehicle(userId, payload));
+  } catch (currentSchemaError) {
+    console.warn('Falling back to legacy vehicle create:', currentSchemaError);
 
-    res.status(201).json(mapCurrentVehicle({
-      ...vehicle,
-      type: String(vehicle.type)
-    }));
-  } catch (error) {
-    console.error('Error creating vehicle:', error);
-    res.status(503).json({ message: 'Vehicle write operations are not available on this deployment.' });
+    try {
+      res.status(201).json(await createLegacyVehicle(userId, payload));
+    } catch (legacySchemaError) {
+      console.error('Error creating vehicle in current and legacy schemas:', legacySchemaError);
+      res.status(503).json({ message: 'Vehicle write operations are not available on this deployment.' });
+    }
   }
 }
 
@@ -233,7 +380,7 @@ export async function getVehicleById(req: Request, res: Response) {
 export async function updateVehicle(req: Request, res: Response) {
   const userId = getAuthenticatedUserId(res);
   const { id } = req.params;
-  const data = req.body;
+  const payload = buildVehicleWritePayload(req.body);
 
   try {
     const existing = await findVehicleById(userId, id);
@@ -242,42 +389,16 @@ export async function updateVehicle(req: Request, res: Response) {
       return;
     }
 
-    const vehicle = await prisma.vehicle.update({
-      where: { id },
-      data: {
-        name: data.name,
-        model: data.model,
-        year: data.year,
-        mileage: data.mileage,
-        type: data.type,
-        licensePlate: data.licensePlate ?? null,
-        fuelType: data.fuelType ?? null,
-        vin: data.vin ?? null,
-        color: data.color ?? null
-      },
-      select: {
-        id: true,
-        userId: true,
-        name: true,
-        model: true,
-        year: true,
-        mileage: true,
-        type: true,
-        licensePlate: true,
-        fuelType: true,
-        color: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    });
+    res.json(await updateCurrentVehicle(id, payload));
+  } catch (currentSchemaError) {
+    console.warn(`Falling back to legacy vehicle update for ${id}:`, currentSchemaError);
 
-    res.json(mapCurrentVehicle({
-      ...vehicle,
-      type: String(vehicle.type)
-    }));
-  } catch (error) {
-    console.error(`Error updating vehicle ${id}:`, error);
-    res.status(503).json({ message: 'Vehicle write operations are not available on this deployment.' });
+    try {
+      res.json(await updateLegacyVehicle(userId, id, payload));
+    } catch (legacySchemaError) {
+      console.error(`Error updating vehicle ${id} in current and legacy schemas:`, legacySchemaError);
+      res.status(503).json({ message: 'Vehicle write operations are not available on this deployment.' });
+    }
   }
 }
 
@@ -294,9 +415,20 @@ export async function deleteVehicle(req: Request, res: Response) {
 
     await prisma.vehicle.delete({ where: { id } });
     res.status(204).end();
-  } catch (error) {
-    console.error(`Error deleting vehicle ${id}:`, error);
-    res.status(503).json({ message: 'Vehicle delete is not available on this deployment.' });
+  } catch (currentSchemaError) {
+    console.warn(`Falling back to legacy vehicle delete for ${id}:`, currentSchemaError);
+
+    try {
+      const deleted = await deleteLegacyVehicle(userId, id);
+      if (!deleted) {
+        res.status(404).json({ message: 'Vehicle not found' });
+        return;
+      }
+      res.status(204).end();
+    } catch (legacySchemaError) {
+      console.error(`Error deleting vehicle ${id} in current and legacy schemas:`, legacySchemaError);
+      res.status(503).json({ message: 'Vehicle delete is not available on this deployment.' });
+    }
   }
 }
 

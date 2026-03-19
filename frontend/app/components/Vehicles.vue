@@ -142,6 +142,7 @@
 </template>
 
 <script lang="ts" setup>
+import { alert } from '@nativescript/core'
 import { computed, ref } from 'nativescript-vue'
 import VehicleService from '@/services/VehicleService'
 import { formatKilometers } from '@/utils/ui'
@@ -232,10 +233,18 @@ async function deleteVehicle() {
     return
   }
 
-  const id = selectedVehicle.value.id
-  await VehicleService.deleteVehicle(id)
-  vehicles.value = vehicles.value.filter(vehicle => vehicle.id !== id)
-  showVehicleDialog.value = false
+  try {
+    const id = selectedVehicle.value.id
+    await VehicleService.deleteVehicle(id)
+    vehicles.value = vehicles.value.filter(vehicle => vehicle.id !== id)
+    showVehicleDialog.value = false
+  } catch (error) {
+    await alert({
+      title: 'Erreur',
+      message: error instanceof Error ? error.message : 'Impossible de supprimer ce vehicule.',
+      okButtonText: 'OK'
+    })
+  }
 }
 
 function addVehicle() {

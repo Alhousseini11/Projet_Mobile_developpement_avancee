@@ -123,7 +123,7 @@
           @tap="saveVehicle"
         >
           <Label
-            :text="isEditing ? '💾 Modifier Véhicule' : '➕ Ajouter Véhicule'"
+            :text="isSaving ? 'Enregistrement...' : isEditing ? '💾 Modifier Véhicule' : '➕ Ajouter Véhicule'"
             class="text-white text-center font-bold text-lg"
           />
         </GridLayout>
@@ -146,7 +146,10 @@
 </template>
 
 <script lang="ts" setup>
+import { alert } from '@nativescript/core'
 import { ref } from 'nativescript-vue'
+import VehicleService from '@/services/VehicleService'
+import { FuelType, type CreateVehicleDTO, type Vehicle, VehicleType } from '@/types/vehicle'
 import { goBack as navigateBack } from '@/utils/navigation'
 
 interface VehicleForm {
@@ -156,56 +159,105 @@ interface VehicleForm {
   year: number
   mileage: number
   licensePlate?: string
-  fuelType: string
-  type: string
+  fuelType: FuelType | `${FuelType}`
+  type: VehicleType | `${VehicleType}`
+  color?: string
 }
 
 const props = defineProps<{
-  vehicle?: VehicleForm
+  vehicle?: Vehicle
 }>()
 
 const defaultForm = (): VehicleForm => ({
-  id: '',
+  id: undefined,
   name: '',
   model: '',
   year: new Date().getFullYear(),
   mileage: 0,
-  licensePlate: '',
-  fuelType: 'Essence',
-  type: 'sedan'
+  licensePlate: undefined,
+  fuelType: FuelType.PETROL,
+  type: VehicleType.SEDAN,
+  color: undefined
 })
 
-const isEditing = ref(Boolean(props.vehicle))
+const isEditing = ref(Boolean(props.vehicle?.id))
+const isSaving = ref(false)
 const form = ref<VehicleForm>({
   ...defaultForm(),
-  ...props.vehicle
+  ...(props.vehicle
+    ? {
+        ...props.vehicle,
+        fuelType: props.vehicle.fuelType ?? FuelType.PETROL
+      }
+    : {})
 })
 
 const onPageLoaded = () => {
   console.log('AddVehicle page loaded')
 }
 
-const saveVehicle = () => {
-  if (!form.value.name || !form.value.model) {
-    console.log('Please fill all required fields')
+function buildPayload(): CreateVehicleDTO {
+  const name = form.value.name.trim()
+  const model = form.value.model.trim()
+  const licensePlate = form.value.licensePlate?.trim()
+  const color = form.value.color?.trim()
+
+  return {
+    name,
+    model,
+    year: Number(form.value.year),
+    mileage: Number(form.value.mileage),
+    type: form.value.type,
+    fuelType: form.value.fuelType,
+    licensePlate: licensePlate || undefined,
+    color: color || undefined
+  }
+}
+
+const saveVehicle = async () => {
+  if (isSaving.value) {
     return
   }
 
-  const vehicleData = {
-    ...form.value,
-    mileage: parseInt(form.value.mileage.toString()),
-    year: parseInt(form.value.year.toString())
+  const payload = buildPayload()
+
+  if (!payload.name || !payload.model || !Number.isFinite(payload.year) || !Number.isFinite(payload.mileage)) {
+    await alert({
+      title: 'Vehicule incomplet',
+      message: 'Renseignez au minimum le nom, le modele, l annee et le kilometrage.',
+      okButtonText: 'OK'
+    })
+    return
   }
 
-  if (isEditing.value) {
-    console.log('Update vehicle:', vehicleData)
-    // this.$http.put(`/api/vehicles/${form.value.id}`, vehicleData)
-  } else {
-    console.log('Create vehicle:', vehicleData)
-    // this.$http.post('/api/vehicles', vehicleData)
-  }
+  try {
+    isSaving.value = true
 
-  goBack()
+    if (isEditing.value && form.value.id) {
+      console.log('Update vehicle:', payload)
+      await VehicleService.updateVehicle(form.value.id, payload)
+    } else {
+      console.log('Create vehicle:', payload)
+      await VehicleService.createVehicle(payload)
+    }
+
+    await alert({
+      title: 'Vehicule',
+      message: isEditing.value ? 'Vehicule mis a jour.' : 'Vehicule ajoute.',
+      okButtonText: 'OK'
+    })
+
+    goBack()
+  } catch (error) {
+    console.error('Vehicle save failed:', error)
+    await alert({
+      title: 'Erreur',
+      message: error instanceof Error ? error.message : 'Impossible d enregistrer le vehicule.',
+      okButtonText: 'OK'
+    })
+  } finally {
+    isSaving.value = false
+  }
 }
 
 const goBack = () => {
