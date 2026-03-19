@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { isSchemaDriftError } from '../_shared/isSchemaDriftError';
+import { isCurrentTutorialSchemaAvailable } from '../_shared/schemaCapabilities';
 
 type TutorialCategory =
   | 'entretien'
@@ -257,6 +258,18 @@ async function readLegacyTutorials() {
 }
 
 async function readTutorialCatalog() {
+  if (!(await isCurrentTutorialSchemaAvailable())) {
+    try {
+      return await readLegacyTutorials();
+    } catch (legacySchemaError) {
+      logger.error(
+        { err: legacySchemaError },
+        'Unable to read tutorials from legacy schema'
+      );
+      return FALLBACK_TUTORIALS.map(cloneTutorial);
+    }
+  }
+
   try {
     return await readCurrentTutorials();
   } catch (currentSchemaError) {

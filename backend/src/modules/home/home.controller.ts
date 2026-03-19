@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { isSchemaDriftError } from '../_shared/isSchemaDriftError';
+import { isCurrentVehicleSchemaAvailable } from '../_shared/schemaCapabilities';
 import { resolveOptionalRequestUser } from '../auth/auth.service';
 
 interface HomeFeedPayload {
@@ -127,6 +128,33 @@ async function readNextReservation(userId: string) {
 }
 
 async function readPrimaryVehicle(userId: string): Promise<HomeVehicleRecord | null> {
+  if (!(await isCurrentVehicleSchemaAvailable())) {
+    try {
+      const vehicles = await prisma.$queryRaw<LegacyHomeVehicleRow[]>`
+        SELECT "id", "brand", "model", "mileage"
+        FROM "Vehicle"
+        WHERE "userId" = ${userId}
+        ORDER BY "id" DESC
+        LIMIT 1
+      `;
+
+      const vehicle = vehicles[0];
+      if (!vehicle) {
+        return null;
+      }
+
+      return {
+        id: vehicle.id,
+        name: vehicle.brand,
+        model: vehicle.model,
+        mileage: vehicle.mileage
+      };
+    } catch (legacySchemaError) {
+      logger.warn({ err: legacySchemaError, userId }, 'Unable to load vehicle context for home feed');
+      return null;
+    }
+  }
+
   try {
     const vehicle = await prisma.vehicle.findFirst({
       where: { userId },

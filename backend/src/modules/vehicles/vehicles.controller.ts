@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { isSchemaDriftError } from '../_shared/isSchemaDriftError';
+import { isCurrentVehicleSchemaAvailable } from '../_shared/schemaCapabilities';
 
 interface VehicleResponse {
   id: string;
@@ -206,6 +207,10 @@ async function readLegacyVehicles(userId: string) {
 }
 
 async function readVehicleCatalog(userId: string) {
+  if (!(await isCurrentVehicleSchemaAvailable())) {
+    return readLegacyVehicles(userId);
+  }
+
   try {
     return await readCurrentVehicles(userId);
   } catch (currentSchemaError) {
@@ -360,6 +365,19 @@ export async function createVehicle(req: Request, res: Response) {
   const userId = getAuthenticatedUserId(res);
   const payload = buildVehicleWritePayload(req.body);
 
+  if (!(await isCurrentVehicleSchemaAvailable())) {
+    try {
+      res.status(201).json(await createLegacyVehicle(userId, payload));
+    } catch (legacySchemaError) {
+      logger.error(
+        { err: legacySchemaError, userId },
+        'Error creating vehicle in legacy schema'
+      );
+      res.status(503).json({ message: 'Vehicle write operations are not available on this deployment.' });
+    }
+    return;
+  }
+
   try {
     res.status(201).json(await createCurrentVehicle(userId, payload));
   } catch (currentSchemaError) {
@@ -401,10 +419,17 @@ export async function updateVehicle(req: Request, res: Response) {
   const { id } = req.params;
   const payload = buildVehicleWritePayload(req.body);
 
+  const currentSchemaAvailable = await isCurrentVehicleSchemaAvailable();
+
   try {
     const existing = await findVehicleById(userId, id);
     if (!existing) {
       res.status(404).json({ message: 'Vehicle not found' });
+      return;
+    }
+
+    if (!currentSchemaAvailable) {
+      res.json(await updateLegacyVehicle(userId, id, payload));
       return;
     }
 
@@ -439,11 +464,22 @@ export async function updateVehicle(req: Request, res: Response) {
 export async function deleteVehicle(req: Request, res: Response) {
   const userId = getAuthenticatedUserId(res);
   const { id } = req.params;
+  const currentSchemaAvailable = await isCurrentVehicleSchemaAvailable();
 
   try {
     const existing = await findVehicleById(userId, id);
     if (!existing) {
       res.status(404).json({ message: 'Vehicle not found' });
+      return;
+    }
+
+    if (!currentSchemaAvailable) {
+      const deleted = await deleteLegacyVehicle(userId, id);
+      if (!deleted) {
+        res.status(404).json({ message: 'Vehicle not found' });
+        return;
+      }
+      res.status(204).end();
       return;
     }
 

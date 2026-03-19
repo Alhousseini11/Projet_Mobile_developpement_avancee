@@ -5,6 +5,7 @@ import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { createStripeClient } from '../../data/stripe/stripeClient';
+import { isCurrentVehicleSchemaAvailable } from '../_shared/schemaCapabilities';
 import { resolveOptionalRequestUser } from '../auth/auth.service';
 import { getReservationCountForUser } from '../reservations/reservations.controller';
 
@@ -346,6 +347,44 @@ function mapMembershipLabel(role: Role) {
   return 'Client';
 }
 
+async function countVehicles(userId: string) {
+  if (await isCurrentVehicleSchemaAvailable()) {
+    return prisma.vehicle.count({ where: { userId } }).catch(() => 0);
+  }
+
+  const rows = await prisma.$queryRaw<Array<{ count: number }>>`
+    SELECT COUNT(*)::int AS "count"
+    FROM "Vehicle"
+    WHERE "userId" = ${userId}
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function findDefaultVehicleLabel(userId: string) {
+  if (await isCurrentVehicleSchemaAvailable()) {
+    const vehicle = await prisma.vehicle
+      .findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' }
+      })
+      .catch(() => null);
+
+    return vehicle ? `${vehicle.name} ${vehicle.model}` : null;
+  }
+
+  const rows = await prisma.$queryRaw<Array<{ brand: string; model: string }>>`
+    SELECT "brand", "model"
+    FROM "Vehicle"
+    WHERE "userId" = ${userId}
+    ORDER BY "id" DESC
+    LIMIT 1
+  `;
+
+  const vehicle = rows[0];
+  return vehicle ? `${vehicle.brand} ${vehicle.model}` : null;
+}
+
 async function buildProfileResponse(req: Request): Promise<ProfilePayload> {
   const authenticatedUser = await resolveOptionalRequestUser(req);
   const userId = authenticatedUser?.id ?? defaultProfileState.id;
@@ -354,19 +393,12 @@ async function buildProfileResponse(req: Request): Promise<ProfilePayload> {
     ? getReservationCountForUser(authenticatedUser.id, authenticatedUser.email)
     : defaultProfileState.appointmentCount;
 
-  const [vehicleCount, appointmentCount, defaultVehicle] = await Promise.all([
-    prisma.vehicle.count({ where: { userId } }).catch(() =>
-      authenticatedUser ? 0 : defaultProfileState.vehicleCount
-    ),
+  const [vehicleCount, appointmentCount, defaultVehicleLabel] = await Promise.all([
+    countVehicles(userId).catch(() => authenticatedUser ? 0 : defaultProfileState.vehicleCount),
     prisma.reservation.count({ where: { userId } }).catch(() =>
       authenticatedUser ? 0 : fallbackAppointmentCount
     ),
-    prisma.vehicle
-      .findFirst({
-        where: { userId },
-        orderBy: { createdAt: 'desc' }
-      })
-      .catch(() => null)
+    findDefaultVehicleLabel(userId).catch(() => null)
   ]);
   const resolvedAppointmentCount =
     appointmentCount > 0 ? appointmentCount : fallbackAppointmentCount;
@@ -390,7 +422,7 @@ async function buildProfileResponse(req: Request): Promise<ProfilePayload> {
     preferredGarage: override.preferredGarage ?? 'Garage Montreal Centre',
     defaultVehicleLabel:
       override.defaultVehicleLabel ??
-      (defaultVehicle ? `${defaultVehicle.name} ${defaultVehicle.model}` : 'Aucun vehicule'),
+      (defaultVehicleLabel ?? 'Aucun vehicule'),
     appointmentCount: resolvedAppointmentCount,
     vehicleCount,
     loyaltyPoints: override.loyaltyPoints ?? resolvedAppointmentCount * 60 + vehicleCount * 30,
