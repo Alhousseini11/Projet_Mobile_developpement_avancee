@@ -87,6 +87,7 @@ const defaultProfileState: ProfilePayload = {
 
 const profileOverrides = new Map<string, Partial<ProfilePayload>>();
 const paymentStates = new Map<string, PaymentMethodPayload>();
+const invoiceStates = new Map<string, InvoicePayload[]>();
 
 const demoInvoices: InvoicePayload[] = [
   {
@@ -134,6 +135,27 @@ const demoInvoices: InvoicePayload[] = [
     ]
   }
 ];
+
+function cloneInvoice(invoice: InvoicePayload): InvoicePayload {
+  return {
+    ...invoice,
+    lineItems: invoice.lineItems.map(lineItem => ({ ...lineItem }))
+  };
+}
+
+function getUserInvoices(userId: string, email?: string | null) {
+  const existing = invoiceStates.get(userId);
+  if (existing) {
+    return existing;
+  }
+
+  const initialInvoices =
+    email?.trim().toLowerCase() === defaultProfileState.email.toLowerCase()
+      ? demoInvoices.map(cloneInvoice)
+      : [];
+  invoiceStates.set(userId, initialInvoices);
+  return initialInvoices;
+}
 
 function isStripeConfigured() {
   return env.STRIPE_KEY.trim().length > 0;
@@ -205,8 +227,8 @@ function getPaymentSummary(userId: string): PaymentMethodPayload {
   };
 }
 
-function getInvoiceSummaries() {
-  return demoInvoices.map(invoice => ({
+function getInvoiceSummaries(invoices: InvoicePayload[]) {
+  return invoices.map(invoice => ({
     id: invoice.id,
     number: invoice.number,
     serviceLabel: invoice.serviceLabel,
@@ -219,8 +241,8 @@ function getInvoiceSummaries() {
   }));
 }
 
-function findInvoiceById(invoiceId: string) {
-  return demoInvoices.find(invoice => invoice.id === invoiceId) ?? null;
+function findInvoiceById(invoices: InvoicePayload[], invoiceId: string) {
+  return invoices.find(invoice => invoice.id === invoiceId) ?? null;
 }
 
 function escapePdfText(value: string) {
@@ -470,12 +492,20 @@ export async function getPaymentMethod(req: Request, res: Response) {
   res.json(getPaymentSummary(profile.id));
 }
 
-export async function listInvoices(_req: Request, res: Response) {
-  res.json(getInvoiceSummaries());
+export async function listInvoices(req: Request, res: Response) {
+  const authenticatedUser = await resolveOptionalRequestUser(req);
+  const invoices = authenticatedUser
+    ? getUserInvoices(authenticatedUser.id, authenticatedUser.email)
+    : demoInvoices;
+  res.json(getInvoiceSummaries(invoices));
 }
 
 export async function downloadInvoicePdf(req: Request, res: Response) {
-  const invoice = findInvoiceById(req.params.invoiceId);
+  const authenticatedUser = await resolveOptionalRequestUser(req);
+  const invoices = authenticatedUser
+    ? getUserInvoices(authenticatedUser.id, authenticatedUser.email)
+    : demoInvoices;
+  const invoice = findInvoiceById(invoices, req.params.invoiceId);
 
   if (!invoice) {
     return res.status(404).json({

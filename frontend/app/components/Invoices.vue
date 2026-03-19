@@ -41,42 +41,53 @@
           </StackLayout>
 
           <StackLayout v-else>
-            <GridLayout
+            <StackLayout
               v-for="invoice in invoices"
               :key="invoice.id"
-              rows="auto,auto,auto,auto"
-              columns="*,auto"
               class="invoice-card"
             >
-              <Label row="0" col="0" :text="invoice.number" class="invoice-number" />
-              <Label
-                row="0"
-                col="1"
-                :text="getStatusLabel(invoice.status)"
-                class="status-pill"
-                :class="invoice.status"
-              />
+              <GridLayout columns="*,auto" class="invoice-header">
+                <Label col="0" :text="invoice.number" class="invoice-number" />
+                <Label
+                  col="1"
+                  :text="getStatusLabel(invoice.status)"
+                  class="status-pill"
+                  :class="invoice.status"
+                />
+              </GridLayout>
 
-              <Label row="1" colSpan="2" :text="invoice.serviceLabel" class="invoice-service" />
-              <Label
-                row="2"
-                colSpan="2"
-                :text="'Emission : ' + formatInvoiceDate(invoice.issuedAt) + ' | RDV : ' + formatInvoiceDate(invoice.appointmentDate)"
-                class="invoice-detail"
-                textWrap="true"
-              />
+              <Label :text="invoice.serviceLabel" class="invoice-service" />
 
-              <GridLayout row="3" colSpan="2" columns="*,auto" class="invoice-footer">
+              <GridLayout columns="*,*" columnSpacing="12" class="invoice-meta-grid">
+                <StackLayout col="0" class="invoice-meta-card">
+                  <Label text="Date emission" class="invoice-meta-label" />
+                  <Label :text="formatInvoiceDate(invoice.issuedAt)" class="invoice-meta-value" />
+                </StackLayout>
+
+                <StackLayout col="1" class="invoice-meta-card">
+                  <Label text="Date rendez-vous" class="invoice-meta-label" />
+                  <Label :text="formatInvoiceDate(invoice.appointmentDate)" class="invoice-meta-value" />
+                </StackLayout>
+              </GridLayout>
+
+              <GridLayout columns="*,auto" class="invoice-total-row">
                 <StackLayout col="0">
-                  <Label :text="'TVA/Taxes : ' + formatAmount(invoice.taxAmount, invoice.currency)" class="invoice-tax" />
+                  <Label
+                    :text="'TVA/Taxes : ' + formatAmount(invoice.taxAmount, invoice.currency)"
+                    class="invoice-tax"
+                  />
                   <Label :text="formatAmount(invoice.totalAmount, invoice.currency)" class="invoice-total" />
                 </StackLayout>
 
-                <GridLayout col="1" class="invoice-cta" @tap="openInvoicePdf(invoice.id)">
-                  <Label text="Ouvrir PDF" class="invoice-cta-text" />
-                </GridLayout>
+                <StackLayout col="1" class="invoice-total-badge">
+                  <Label text="Total" class="invoice-total-badge-label" />
+                </StackLayout>
               </GridLayout>
-            </GridLayout>
+
+              <GridLayout class="invoice-cta" @tap="openInvoicePdf(invoice.id)">
+                <Label text="Ouvrir le PDF" class="invoice-cta-text" />
+              </GridLayout>
+            </StackLayout>
           </StackLayout>
         </StackLayout>
       </ScrollView>
@@ -168,7 +179,7 @@ function goBack() {
 .hero-title { color: #111827; font-size: 22; font-weight: 800; margin-bottom: 4; }
 .hero-subtitle { color: #6b7280; font-size: 13; }
 .summary-grid { margin-bottom: 18; }
-.summary-card { background-color: #ffffff; border-radius: 16; padding: 16; shadow-color: #000; shadow-opacity: 0.06; shadow-radius: 8; shadow-offset: 0 2; }
+.summary-card { background-color: #ffffff; border-radius: 16; padding: 16; min-height: 96; shadow-color: #000; shadow-opacity: 0.06; shadow-radius: 8; shadow-offset: 0 2; vertical-align: center; }
 .summary-card-dark { background-color: #1f2733; }
 .summary-value { color: #111827; font-size: 24; font-weight: 800; margin-bottom: 4; }
 .summary-value.light { color: #ffffff; font-size: 18; }
@@ -178,16 +189,22 @@ function goBack() {
 .empty-title { color: #111827; font-size: 16; font-weight: 700; margin-bottom: 8; }
 .empty-copy { color: #6b7280; font-size: 13; }
 .invoice-card { background-color: #ffffff; border-radius: 16; padding: 16; margin-bottom: 12; shadow-color: #000; shadow-opacity: 0.06; shadow-radius: 8; shadow-offset: 0 2; }
+.invoice-header { margin-bottom: 10; }
 .invoice-number { color: #111827; font-size: 16; font-weight: 800; }
 .status-pill { font-size: 11; font-weight: 700; padding: 6 10; border-radius: 999; text-align: center; }
 .status-pill.paid { background-color: #dcfce7; color: #166534; }
 .status-pill.pending { background-color: #fef3c7; color: #92400e; }
-.invoice-service { color: #111827; font-size: 15; font-weight: 700; margin-top: 10; }
-.invoice-detail { color: #6b7280; font-size: 12; margin-top: 8; }
-.invoice-footer { margin-top: 14; }
+.invoice-service { color: #111827; font-size: 16; font-weight: 700; margin-bottom: 12; }
+.invoice-meta-grid { margin-bottom: 14; }
+.invoice-meta-card { background-color: #f8fafc; border-radius: 12; padding: 12; min-height: 72; }
+.invoice-meta-label { color: #6b7280; font-size: 11; font-weight: 700; margin-bottom: 6; text-transform: uppercase; }
+.invoice-meta-value { color: #111827; font-size: 13; font-weight: 700; }
+.invoice-total-row { background-color: #fff7ed; border-radius: 12; padding: 12 14; margin-bottom: 12; vertical-align: center; }
 .invoice-tax { color: #6b7280; font-size: 12; }
-.invoice-total { color: #dc2626; font-size: 18; font-weight: 800; margin-top: 4; }
-.invoice-cta { background-color: #dc2626; border-radius: 12; padding: 12 16; vertical-align: center; }
+.invoice-total { color: #dc2626; font-size: 20; font-weight: 800; margin-top: 4; }
+.invoice-total-badge { background-color: #ffffff; border-radius: 999; padding: 8 12; vertical-align: center; }
+.invoice-total-badge-label { color: #c2410c; font-size: 11; font-weight: 800; text-align: center; }
+.invoice-cta { background-color: #dc2626; border-radius: 12; padding: 14 16; vertical-align: center; }
 .invoice-cta-text { color: #ffffff; font-size: 14; font-weight: 700; text-align: center; }
 .bottom-nav { background-color: #121826; border-top-width: 1; border-top-color: #1f2733; }
 .nav-item { align-items: center; justify-content: center; padding: 10 4 4 4; }

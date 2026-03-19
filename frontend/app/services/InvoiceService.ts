@@ -1,6 +1,8 @@
 import { API_BASE_URL, apiRequest } from '@/utils/api'
+import { readStoredSession } from '@/utils/authStorage'
 import type { InvoiceSummary } from '@/types/invoice'
 
+const DEMO_INVOICE_EMAIL = 'alex.martin@example.com'
 const MOCK_INVOICES: InvoiceSummary[] = [
   {
     id: 'invoice-1001',
@@ -25,6 +27,23 @@ const MOCK_INVOICES: InvoiceSummary[] = [
     status: 'pending'
   }
 ]
+const fallbackInvoicesByEmail = new Map<string, InvoiceSummary[]>()
+
+function getInvoiceFallbackKey() {
+  return readStoredSession()?.user.email?.trim().toLowerCase() || DEMO_INVOICE_EMAIL
+}
+
+function getFallbackInvoiceStore() {
+  const key = getInvoiceFallbackKey()
+  const existing = fallbackInvoicesByEmail.get(key)
+  if (existing) {
+    return existing
+  }
+
+  const initialInvoices = key === DEMO_INVOICE_EMAIL ? MOCK_INVOICES.map(invoice => ({ ...invoice })) : []
+  fallbackInvoicesByEmail.set(key, initialInvoices)
+  return initialInvoices
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -46,12 +65,16 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 
 class InvoiceService {
   getFallbackInvoices(): InvoiceSummary[] {
-    return MOCK_INVOICES.map(invoice => ({ ...invoice }))
+    return getFallbackInvoiceStore().map(invoice => ({ ...invoice }))
   }
 
   async getInvoices(): Promise<InvoiceSummary[]> {
     try {
       const invoices = await withTimeout(apiRequest<InvoiceSummary[]>('/profile/invoices'), 1500)
+      fallbackInvoicesByEmail.set(
+        getInvoiceFallbackKey(),
+        invoices.map(invoice => ({ ...invoice }))
+      )
       return invoices.map(invoice => ({ ...invoice }))
     } catch (error) {
       console.error('Error fetching invoices:', error)
