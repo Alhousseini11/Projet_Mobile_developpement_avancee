@@ -1,7 +1,9 @@
+import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
 import { createPlaceholderHandler } from '../_shared/createPlaceholderHandler';
 
 type ReservationStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
+const DEMO_ACCOUNT_EMAIL = 'alex.martin@example.com';
 
 interface ReservationServiceOption {
   id: string;
@@ -12,6 +14,7 @@ interface ReservationServiceOption {
 
 interface ReservationRecord {
   id: string;
+  userId: string;
   serviceId: string;
   serviceLabel: string;
   date: string;
@@ -56,7 +59,7 @@ const SLOT_BY_SERVICE: Record<string, string[]> = {
   diagnostic: ['09:30', '12:00', '15:30', '18:00']
 };
 
-const reservations: ReservationRecord[] = [
+const DEMO_RESERVATION_SEED: Array<Omit<ReservationRecord, 'userId'>> = [
   {
     id: 'reservation-1',
     serviceId: 'oil-change',
@@ -79,13 +82,54 @@ const reservations: ReservationRecord[] = [
   }
 ];
 
-export function getReservationCount() {
-  return reservations.length;
+const reservationsByUser = new Map<string, ReservationRecord[]>();
+
+function getAuthenticatedUser(res: Response) {
+  return {
+    userId: String(res.locals.authUser?.id ?? ''),
+    email:
+      typeof res.locals.authUser?.email === 'string'
+        ? res.locals.authUser.email.trim().toLowerCase()
+        : null
+  };
+}
+
+function createDemoReservations(userId: string) {
+  return DEMO_RESERVATION_SEED.map(reservation => ({
+    ...reservation,
+    id: `${userId}-${reservation.id}`,
+    userId
+  }));
+}
+
+function getUserReservations(userId: string, email?: string | null) {
+  const existing = reservationsByUser.get(userId);
+  if (existing) {
+    return existing;
+  }
+
+  const initialReservations =
+    email === DEMO_ACCOUNT_EMAIL ? createDemoReservations(userId) : [];
+  reservationsByUser.set(userId, initialReservations);
+  return initialReservations;
+}
+
+function getAllReservations() {
+  return [...reservationsByUser.values()].flatMap(userReservations => userReservations);
+}
+
+export function getReservationCountForUser(userId: string, email?: string | null) {
+  if (!userId) {
+    return 0;
+  }
+
+  return getUserReservations(userId, email).length;
 }
 
 function serializeReservation(reservation: ReservationRecord) {
+  const { userId: _userId, ...payload } = reservation;
   return {
-    ...reservation,
+    ...payload,
     createdAt: reservation.createdAt.toISOString(),
     updatedAt: reservation.updatedAt.toISOString()
   };
@@ -96,7 +140,7 @@ function findService(serviceId: string) {
 }
 
 function getReservedSlots(serviceId: string, date: string, excludeId?: string) {
-  return reservations
+  return getAllReservations()
     .filter(
       reservation =>
         reservation.id !== excludeId &&
@@ -132,7 +176,8 @@ export const listAvailableSlots = async (req: Request, res: Response) => {
 };
 
 export const listReservations = async (_req: Request, res: Response) => {
-  const sortedReservations = [...reservations].sort((left, right) => {
+  const { userId, email } = getAuthenticatedUser(res);
+  const sortedReservations = [...getUserReservations(userId, email)].sort((left, right) => {
     const leftKey = `${left.date}T${left.time}:00`;
     const rightKey = `${right.date}T${right.time}:00`;
     return leftKey.localeCompare(rightKey);
@@ -142,6 +187,7 @@ export const listReservations = async (_req: Request, res: Response) => {
 };
 
 export const createReservation = async (req: Request, res: Response) => {
+  const { userId, email } = getAuthenticatedUser(res);
   const serviceId = typeof req.body?.serviceId === 'string' ? req.body.serviceId : '';
   const date = typeof req.body?.date === 'string' ? req.body.date : '';
   const time = typeof req.body?.time === 'string' ? req.body.time : '';
@@ -171,8 +217,10 @@ export const createReservation = async (req: Request, res: Response) => {
   }
 
   const now = new Date();
+  const userReservations = getUserReservations(userId, email);
   const reservation: ReservationRecord = {
-    id: `reservation-${reservations.length + 1}`,
+    id: randomUUID(),
+    userId,
     serviceId,
     serviceLabel:
       typeof req.body?.serviceLabel === 'string' && req.body.serviceLabel.trim()
@@ -186,12 +234,13 @@ export const createReservation = async (req: Request, res: Response) => {
     updatedAt: now
   };
 
-  reservations.unshift(reservation);
+  userReservations.unshift(reservation);
   res.status(201).json(serializeReservation(reservation));
 };
 
 export const getReservationById = async (req: Request, res: Response) => {
-  const reservation = reservations.find(item => item.id === req.params.id);
+  const { userId, email } = getAuthenticatedUser(res);
+  const reservation = getUserReservations(userId, email).find(item => item.id === req.params.id);
 
   if (!reservation) {
     res.status(404).json({
@@ -204,7 +253,8 @@ export const getReservationById = async (req: Request, res: Response) => {
 };
 
 export const updateReservation = async (req: Request, res: Response) => {
-  const reservation = reservations.find(item => item.id === req.params.id);
+  const { userId, email } = getAuthenticatedUser(res);
+  const reservation = getUserReservations(userId, email).find(item => item.id === req.params.id);
 
   if (!reservation) {
     res.status(404).json({

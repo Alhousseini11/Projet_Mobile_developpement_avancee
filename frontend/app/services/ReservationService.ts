@@ -1,4 +1,5 @@
 import { apiRequest } from '@/utils/api'
+import { readStoredSession } from '@/utils/authStorage'
 import type {
   CreateReservationDTO,
   Reservation,
@@ -10,6 +11,7 @@ export type {
   Reservation,
   ReservationServiceOption
 } from '@/types/reservation'
+const DEMO_RESERVATION_EMAIL = 'alex.martin@example.com'
 
 const MOCK_SERVICES: ReservationServiceOption[] = [
   {
@@ -45,8 +47,8 @@ const MOCK_SLOT_BY_SERVICE: Record<string, string[]> = {
   diagnostic: ['09:30', '12:00', '15:30', '18:00']
 }
 
-const MOCK_RESERVATIONS: Reservation[] = []
-MOCK_RESERVATIONS.push(
+const DEMO_RESERVATIONS: Reservation[] = []
+DEMO_RESERVATIONS.push(
   {
     id: 'reservation-1',
     serviceId: 'oil-change',
@@ -68,6 +70,7 @@ MOCK_RESERVATIONS.push(
     updatedAt: new Date('2026-03-12T14:15:00')
   }
 )
+const fallbackReservationsByEmail = new Map<string, Reservation[]>()
 
 const RESERVATION_READ_TIMEOUT_MS = 9000
 
@@ -87,6 +90,24 @@ function cloneReservation(reservation: Reservation): Reservation {
   }
 }
 
+function getReservationFallbackKey(): string {
+  const email = readStoredSession()?.user.email?.trim().toLowerCase()
+  return email || DEMO_RESERVATION_EMAIL
+}
+
+function getFallbackReservationStore(): Reservation[] {
+  const key = getReservationFallbackKey()
+  const existing = fallbackReservationsByEmail.get(key)
+  if (existing) {
+    return existing
+  }
+
+  const initialReservations =
+    key === DEMO_RESERVATION_EMAIL ? DEMO_RESERVATIONS.map(cloneReservation) : []
+  fallbackReservationsByEmail.set(key, initialReservations)
+  return initialReservations
+}
+
 class ReservationService {
   getFallbackServices(): ReservationServiceOption[] {
     return MOCK_SERVICES.map(cloneService)
@@ -94,7 +115,7 @@ class ReservationService {
 
   getFallbackAvailableSlots(serviceId: string, date: string): string[] {
     const baseSlots = MOCK_SLOT_BY_SERVICE[serviceId] ?? ['09:00', '11:00', '14:00', '16:00']
-    const reservedSlots = MOCK_RESERVATIONS
+    const reservedSlots = getFallbackReservationStore()
       .filter(reservation => reservation.serviceId === serviceId && reservation.date === date)
       .map(reservation => reservation.time)
 
@@ -150,7 +171,7 @@ class ReservationService {
   }
 
   getFallbackReservations(): Reservation[] {
-    return [...MOCK_RESERVATIONS]
+    return [...getFallbackReservationStore()]
       .sort((left, right) => {
         const leftKey = `${left.date}T${left.time}:00`
         const rightKey = `${right.date}T${right.time}:00`
@@ -191,16 +212,17 @@ class ReservationService {
       return this.normalize(created)
     } catch (error) {
       console.error('Error creating reservation:', error)
+      const fallbackReservations = getFallbackReservationStore()
 
       const reservation: Reservation = {
-        id: `reservation-${MOCK_RESERVATIONS.length + 1}`,
+        id: `reservation-${fallbackReservations.length + 1}`,
         ...data,
         status: 'confirmed',
         createdAt: new Date(),
         updatedAt: new Date()
       }
 
-      MOCK_RESERVATIONS.unshift(reservation)
+      fallbackReservations.unshift(reservation)
       return reservation
     }
   }

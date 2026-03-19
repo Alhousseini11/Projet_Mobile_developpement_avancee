@@ -5,7 +5,7 @@ import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { createStripeClient } from '../../data/stripe/stripeClient';
 import { resolveOptionalRequestUser } from '../auth/auth.service';
-import { getReservationCount } from '../reservations/reservations.controller';
+import { getReservationCountForUser } from '../reservations/reservations.controller';
 
 interface ProfilePayload {
   id: string;
@@ -327,11 +327,9 @@ async function buildProfileResponse(req: Request): Promise<ProfilePayload> {
   const authenticatedUser = await resolveOptionalRequestUser(req);
   const userId = authenticatedUser?.id ?? defaultProfileState.id;
   const override = authenticatedUser ? profileOverrides.get(userId) ?? {} : {};
-  const canUseReservationFallback =
-    !authenticatedUser || authenticatedUser.email === defaultProfileState.email;
-  const fallbackAppointmentCount = canUseReservationFallback
-    ? Math.max(getReservationCount(), defaultProfileState.appointmentCount)
-    : 0;
+  const fallbackAppointmentCount = authenticatedUser
+    ? getReservationCountForUser(authenticatedUser.id, authenticatedUser.email)
+    : defaultProfileState.appointmentCount;
 
   const [vehicleCount, appointmentCount, defaultVehicle] = await Promise.all([
     prisma.vehicle.count({ where: { userId } }).catch(() =>
