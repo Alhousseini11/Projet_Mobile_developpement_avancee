@@ -15,7 +15,9 @@ test('findReservationService returns the configured service definition', () => {
     id: 'oil-change',
     label: 'Vidange',
     durationMinutes: 45,
-    price: 79
+    price: 79,
+    reviewAverage: 0,
+    reviewCount: 0
   });
 });
 
