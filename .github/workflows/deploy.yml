@@ -39,5 +39,5 @@ jobs:
             git fetch origin main
             git checkout main
             git pull --ff-only origin main
-            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build backend nginx
+            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build backend
             docker compose --env-file .env.prod -f docker-compose.prod.yml ps
