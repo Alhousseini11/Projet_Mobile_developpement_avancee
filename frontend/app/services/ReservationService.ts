@@ -21,25 +21,33 @@ const MOCK_SERVICES: ReservationServiceOption[] = [
     id: 'oil-change',
     label: 'Vidange',
     durationMinutes: 45,
-    price: 79
+    price: 79,
+    reviewAverage: 0,
+    reviewCount: 0
   },
   {
     id: 'brakes',
     label: 'Freins',
     durationMinutes: 90,
-    price: 149
+    price: 149,
+    reviewAverage: 0,
+    reviewCount: 0
   },
   {
     id: 'battery',
     label: 'Batterie',
     durationMinutes: 30,
-    price: 99
+    price: 99,
+    reviewAverage: 0,
+    reviewCount: 0
   },
   {
     id: 'diagnostic',
     label: 'Diagnostic',
     durationMinutes: 60,
-    price: 59
+    price: 59,
+    reviewAverage: 0,
+    reviewCount: 0
   }
 ]
 
@@ -58,8 +66,19 @@ let reservationServicesRequest: Promise<ReservationServiceOption[]> | null = nul
 let reservationsRequestByKey = new Map<string, Promise<Reservation[]>>()
 const slotsRequestByKey = new Map<string, Promise<string[]>>()
 
+function normalizeService(service: Partial<ReservationServiceOption>): ReservationServiceOption {
+  return {
+    id: String(service.id ?? ''),
+    label: String(service.label ?? ''),
+    durationMinutes: Number(service.durationMinutes ?? 0),
+    price: Number(service.price ?? 0),
+    reviewAverage: Number(service.reviewAverage ?? 0),
+    reviewCount: Number(service.reviewCount ?? 0)
+  }
+}
+
 function cloneService(service: ReservationServiceOption): ReservationServiceOption {
-  return { ...service }
+  return normalizeService(service)
 }
 
 function cloneReservation(reservation: Reservation): Reservation {
@@ -107,7 +126,7 @@ class ReservationService {
         const services = await apiRequest<ReservationServiceOption[]>('/reservations/services', {
           timeoutMs: RESERVATION_READ_TIMEOUT_MS
         })
-        return services.map(cloneService)
+        return services.map(service => normalizeService(service))
       } catch (error) {
         console.warn('Error fetching reservation services:', error)
         return this.getFallbackServices()

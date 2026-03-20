@@ -5,6 +5,8 @@ export interface ReservationServiceOption {
   label: string
   durationMinutes: number
   price: number
+  reviewAverage: number
+  reviewCount: number
 }
 
 export interface Reservation {

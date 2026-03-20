@@ -35,6 +35,7 @@
                   :text="service.durationMinutes + ' min   ' + formatCurrency(service.price)"
                   class="service-meta"
                 />
+                <Label :text="formatServiceReviews(service)" class="service-rating" />
               </StackLayout>
               <Label col="1" :text="selectedServiceId === service.id ? 'OK' : '+'" class="service-badge" />
             </GridLayout>
@@ -154,6 +155,17 @@ function buildDateOptions(days: number): DateOption[] {
   }
 
   return options
+}
+
+function formatServiceReviews(service: ReservationServiceOption) {
+  const reviewCount = Number(service.reviewCount ?? 0)
+  const reviewAverage = Number(service.reviewAverage ?? 0)
+
+  if (reviewCount <= 0) {
+    return 'Aucun avis public pour le moment'
+  }
+
+  return `Note ${reviewAverage.toFixed(1)}/5 - ${reviewCount} avis`
 }
 
 const dateOptions = buildDateOptions(6)
@@ -372,6 +384,13 @@ function goBack() {
   font-size: 12;
   color: #6b7280;
   margin-top: 4;
+}
+
+.service-rating {
+  font-size: 12;
+  color: #b45309;
+  margin-top: 4;
+  font-weight: 700;
 }
 
 .service-badge {

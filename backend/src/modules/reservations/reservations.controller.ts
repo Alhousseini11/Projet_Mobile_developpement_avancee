@@ -281,8 +281,49 @@ async function getAvailableSlots(serviceId: string, date: string, excludeId?: st
   return baseSlots.filter(slot => !reservedSlots.has(slot));
 }
 
+async function listServicesWithReviewStats() {
+  try {
+    const reviews = await prisma.review.findMany({
+      select: {
+        rating: true,
+        reservation: {
+          select: {
+            serviceType: true
+          }
+        }
+      }
+    });
+
+    const statsByService = new Map<string, { total: number; count: number }>();
+
+    for (const review of reviews) {
+      const serviceId = review.reservation.serviceType;
+      const existing = statsByService.get(serviceId) ?? { total: 0, count: 0 };
+      existing.total += review.rating;
+      existing.count += 1;
+      statsByService.set(serviceId, existing);
+    }
+
+    return RESERVATION_SERVICES.map(service => {
+      const stats = statsByService.get(service.id);
+      const reviewCount = stats?.count ?? 0;
+      const reviewAverage =
+        reviewCount > 0 && stats ? Number((stats.total / reviewCount).toFixed(1)) : 0;
+
+      return {
+        ...service,
+        reviewAverage,
+        reviewCount
+      } satisfies ReservationServiceOption;
+    });
+  } catch (error) {
+    console.error('Error aggregating reservation service reviews:', error);
+    return RESERVATION_SERVICES;
+  }
+}
+
 export const listReservationServices = async (_req: Request, res: Response) => {
-  res.json(RESERVATION_SERVICES);
+  res.json(await listServicesWithReviewStats());
 };
 
 export const listAvailableSlots = async (req: Request, res: Response) => {

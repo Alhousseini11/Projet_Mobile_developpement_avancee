@@ -3,6 +3,8 @@ export interface ReservationServiceOption {
   label: string;
   durationMinutes: number;
   price: number;
+  reviewAverage: number;
+  reviewCount: number;
 }
 
 const TAX_RATE = 0.15;
@@ -12,25 +14,33 @@ export const RESERVATION_SERVICES: ReservationServiceOption[] = [
     id: 'oil-change',
     label: 'Vidange',
     durationMinutes: 45,
-    price: 79
+    price: 79,
+    reviewAverage: 0,
+    reviewCount: 0
   },
   {
     id: 'brakes',
     label: 'Freins',
     durationMinutes: 90,
-    price: 149
+    price: 149,
+    reviewAverage: 0,
+    reviewCount: 0
   },
   {
     id: 'battery',
     label: 'Batterie',
     durationMinutes: 30,
-    price: 99
+    price: 99,
+    reviewAverage: 0,
+    reviewCount: 0
   },
   {
     id: 'diagnostic',
     label: 'Diagnostic',
     durationMinutes: 60,
-    price: 59
+    price: 59,
+    reviewAverage: 0,
+    reviewCount: 0
   }
 ];
 
