@@ -1,6 +1,21 @@
 import { clearStoredSession, getStoredAccessToken } from '@/utils/authStorage'
 
-const API_BASE_URL = process.env.NS_API_BASE_URL || 'http://167.99.178.126:3000/api'
+function getConfiguredApiBaseUrl() {
+  if (
+    typeof process !== 'undefined' &&
+    process &&
+    typeof process === 'object' &&
+    process.env &&
+    typeof process.env.NS_API_BASE_URL === 'string' &&
+    process.env.NS_API_BASE_URL.trim().length > 0
+  ) {
+    return process.env.NS_API_BASE_URL.trim()
+  }
+
+  return 'http://167.99.178.126:3000/api'
+}
+
+const API_BASE_URL = getConfiguredApiBaseUrl()
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
