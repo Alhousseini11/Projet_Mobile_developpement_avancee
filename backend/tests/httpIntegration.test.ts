@@ -317,6 +317,25 @@ runIntegrationTest('register, login refresh and profile flow work through HTTP',
 runIntegrationTest('authenticated user can create reservations and reviews through HTTP', async () => {
   const session = await registerUser();
 
+  const createVehicleResult = await apiRequest<{
+    id: string;
+    name: string;
+  }>('/api/vehicles', {
+    method: 'POST',
+    token: session.accessToken,
+    body: {
+      name: 'Toyota Corolla',
+      model: 'Corolla 2018',
+      year: 2018,
+      mileage: 75000,
+      type: 'sedan',
+      licensePlate: 'TEST-123',
+      fuelType: 'Essence'
+    }
+  });
+  assert.equal(createVehicleResult.response.status, 201);
+  assert.ok(createVehicleResult.payload?.id);
+
   const servicesResult = await apiRequest<Array<{ id: string; label: string }>>(
     '/api/reservations/services'
   );
@@ -334,6 +353,8 @@ runIntegrationTest('authenticated user can create reservations and reviews throu
     id: string;
     serviceId: string;
     serviceLabel: string;
+    vehicleId?: string;
+    vehicleLabel?: string;
     date: string;
     time: string;
     status: string;
@@ -342,6 +363,7 @@ runIntegrationTest('authenticated user can create reservations and reviews throu
     token: session.accessToken,
     body: {
       serviceId: 'oil-change',
+      vehicleId: createVehicleResult.payload?.id,
       date: '2026-04-15',
       time: '10:00',
       notes: 'Integration test reservation'
@@ -351,9 +373,10 @@ runIntegrationTest('authenticated user can create reservations and reviews throu
   assert.equal(createReservationResult.response.status, 201);
   assert.equal(createReservationResult.payload?.serviceId, 'oil-change');
   assert.equal(createReservationResult.payload?.serviceLabel, 'Vidange');
+  assert.equal(createReservationResult.payload?.vehicleId, createVehicleResult.payload?.id);
   assert.equal(createReservationResult.payload?.status, 'confirmed');
 
-  const reservationsResult = await apiRequest<Array<{ id: string; serviceId: string }>>(
+  const reservationsResult = await apiRequest<Array<{ id: string; serviceId: string; vehicleId?: string }>>(
     '/api/reservations',
     {
       token: session.accessToken
@@ -363,6 +386,38 @@ runIntegrationTest('authenticated user can create reservations and reviews throu
   assert.equal(reservationsResult.response.status, 200);
   assert.equal(reservationsResult.payload?.length, 1);
   assert.equal(reservationsResult.payload?.[0]?.id, createReservationResult.payload?.id);
+  assert.equal(reservationsResult.payload?.[0]?.vehicleId, createVehicleResult.payload?.id);
+
+  const editableSlotsResult = await apiRequest<string[]>(
+    `/api/reservations/slots?serviceId=oil-change&date=2026-04-15&excludeId=${createReservationResult.payload?.id}`,
+    {
+      token: session.accessToken
+    }
+  );
+  assert.equal(editableSlotsResult.response.status, 200);
+  assert.ok(editableSlotsResult.payload?.includes('10:00'));
+
+  const updateReservationResult = await apiRequest<{
+    id: string;
+    serviceId: string;
+    vehicleId?: string;
+    date: string;
+    time: string;
+    status: string;
+  }>(`/api/reservations/${createReservationResult.payload?.id}`, {
+    method: 'PATCH',
+    token: session.accessToken,
+    body: {
+      date: '2026-04-15',
+      time: '13:30',
+      vehicleId: createVehicleResult.payload?.id
+    }
+  });
+
+  assert.equal(updateReservationResult.response.status, 200);
+  assert.equal(updateReservationResult.payload?.id, createReservationResult.payload?.id);
+  assert.equal(updateReservationResult.payload?.time, '13:30');
+  assert.equal(updateReservationResult.payload?.vehicleId, createVehicleResult.payload?.id);
 
   const reviewCreateResult = await apiRequest<{
     reservationId: string;

@@ -233,7 +233,7 @@ async function readVehicleCatalog(userId: string) {
   }
 }
 
-async function findVehicleById(userId: string, vehicleId: string) {
+export async function findVehicleById(userId: string, vehicleId: string) {
   const vehicles = await readVehicleCatalog(userId);
   return vehicles.find(vehicle => vehicle.id === vehicleId) ?? null;
 }

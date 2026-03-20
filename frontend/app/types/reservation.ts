@@ -13,6 +13,8 @@ export interface Reservation {
   id: string
   serviceId: string
   serviceLabel: string
+  vehicleId?: string
+  vehicleLabel?: string
   date: string
   time: string
   status: ReservationStatus
@@ -24,7 +26,17 @@ export interface Reservation {
 export interface CreateReservationDTO {
   serviceId: string
   serviceLabel: string
+  vehicleId?: string
   date: string
   time: string
   notes?: string
+}
+
+export interface UpdateReservationDTO {
+  serviceId?: string
+  vehicleId?: string
+  date?: string
+  time?: string
+  notes?: string
+  status?: ReservationStatus
 }

@@ -26,7 +26,7 @@
             <GridLayout
               v-for="appointment in appointments"
               :key="appointment.id"
-              rows="auto,auto,auto"
+              rows="auto,auto,auto,auto,auto"
               columns="*,auto"
               class="appointment-card"
             >
@@ -51,6 +51,22 @@
                 :text="'Heure : ' + appointment.time"
                 class="appointment-detail"
               />
+              <Label
+                v-if="appointment.vehicleLabel"
+                row="3"
+                colSpan="2"
+                :text="'Vehicule : ' + appointment.vehicleLabel"
+                class="appointment-detail"
+              />
+              <GridLayout
+                v-if="canEditAppointment(appointment)"
+                row="4"
+                colSpan="2"
+                class="edit-cta"
+                @tap="editAppointment(appointment)"
+              >
+                <Label text="Modifier ce rendez-vous" class="edit-cta-text" />
+              </GridLayout>
             </GridLayout>
           </StackLayout>
 
@@ -99,8 +115,12 @@ import type { Reservation, ReservationStatus } from '@/types/reservation'
 const appointments = ref<Reservation[]>([])
 
 async function onPageLoaded() {
-  appointments.value = await ReservationService.getMyReservations()
+  await refreshAppointments()
   console.log('My appointments page loaded')
+}
+
+async function refreshAppointments() {
+  appointments.value = await ReservationService.getMyReservations()
 }
 
 function formatAppointmentDate(date: string) {
@@ -119,6 +139,19 @@ function getStatusClass(status: ReservationStatus) {
   if (status === 'pending') return 'pending'
   if (status === 'completed') return 'completed'
   return 'cancelled'
+}
+
+function canEditAppointment(appointment: Reservation) {
+  return appointment.status === 'pending' || appointment.status === 'confirmed'
+}
+
+function editAppointment(appointment: Reservation) {
+  void navigateToPage('reservations', {
+    props: {
+      reservationToEdit: appointment,
+      onReservationUpdated: refreshAppointments
+    }
+  })
 }
 
 function navigateTo(page: AppPage) {
@@ -229,6 +262,20 @@ function goBack() {
   color: #4b5563;
   font-size: 13;
   margin-top: 8;
+}
+
+.edit-cta {
+  background-color: #fff1f2;
+  border-radius: 10;
+  padding: 12 14;
+  margin-top: 12;
+}
+
+.edit-cta-text {
+  color: #dc2626;
+  font-size: 13;
+  font-weight: 800;
+  text-align: center;
 }
 
 .status-pill {

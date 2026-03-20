@@ -7,13 +7,15 @@ import { apiRequest } from '@/utils/api'
 import type {
   CreateReservationDTO,
   Reservation,
-  ReservationServiceOption
+  ReservationServiceOption,
+  UpdateReservationDTO
 } from '@/types/reservation'
 
 export type {
   CreateReservationDTO,
   Reservation,
-  ReservationServiceOption
+  ReservationServiceOption,
+  UpdateReservationDTO
 } from '@/types/reservation'
 
 const MOCK_SERVICES: ReservationServiceOption[] = [
@@ -107,10 +109,15 @@ class ReservationService {
     return MOCK_SERVICES.map(cloneService)
   }
 
-  getFallbackAvailableSlots(serviceId: string, date: string): string[] {
+  getFallbackAvailableSlots(serviceId: string, date: string, excludeId?: string): string[] {
     const baseSlots = MOCK_SLOT_BY_SERVICE[serviceId] ?? ['09:00', '11:00', '14:00', '16:00']
     const reservedSlots = getFallbackReservationStore()
-      .filter(reservation => reservation.serviceId === serviceId && reservation.date === date)
+      .filter(
+        reservation =>
+          reservation.serviceId === serviceId &&
+          reservation.date === date &&
+          reservation.id !== excludeId
+      )
       .map(reservation => reservation.time)
 
     return baseSlots.filter(slot => !reservedSlots.includes(slot))
@@ -138,8 +145,8 @@ class ReservationService {
     return reservationServicesRequest.then(services => services.map(cloneService))
   }
 
-  async getAvailableSlots(serviceId: string, date: string): Promise<string[]> {
-    const requestKey = `${serviceId}:${date}`
+  async getAvailableSlots(serviceId: string, date: string, excludeId?: string): Promise<string[]> {
+    const requestKey = `${serviceId}:${date}:${excludeId ?? ''}`
     const existingRequest = slotsRequestByKey.get(requestKey)
     if (existingRequest) {
       return existingRequest.then(slots => [...slots])
@@ -148,13 +155,15 @@ class ReservationService {
     const request = (async () => {
       try {
         const slots = await apiRequest<string[]>(
-          `/reservations/slots?serviceId=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}`,
+          `/reservations/slots?serviceId=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}${
+            excludeId ? `&excludeId=${encodeURIComponent(excludeId)}` : ''
+          }`,
           { timeoutMs: RESERVATION_READ_TIMEOUT_MS }
         )
         return [...slots]
       } catch (error) {
         console.warn(`Error fetching slots for ${serviceId} on ${date}:`, error)
-        return this.getFallbackAvailableSlots(serviceId, date)
+        return this.getFallbackAvailableSlots(serviceId, date, excludeId)
       } finally {
         slotsRequestByKey.delete(requestKey)
       }
@@ -214,6 +223,30 @@ class ReservationService {
       return normalized
     } catch (error) {
       console.error('Error creating reservation:', error)
+      throw error
+    }
+  }
+
+  async updateReservation(reservationId: string, data: UpdateReservationDTO): Promise<Reservation> {
+    try {
+      const updated = await apiRequest<Reservation>(`/reservations/${reservationId}`, {
+        method: 'PATCH',
+        body: data
+      })
+
+      const normalized = this.normalize(updated)
+      const fallbackReservations = getFallbackReservationStore()
+      const reservationIndex = fallbackReservations.findIndex(
+        reservation => reservation.id === reservationId
+      )
+
+      if (reservationIndex >= 0) {
+        fallbackReservations.splice(reservationIndex, 1, cloneReservation(normalized))
+      }
+
+      return normalized
+    } catch (error) {
+      console.error('Error updating reservation:', error)
       throw error
     }
   }

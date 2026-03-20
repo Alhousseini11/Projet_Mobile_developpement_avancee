@@ -3,6 +3,8 @@ import { Request, Response } from 'express';
 import { isDemoUserEmail, normalizeEmail } from '../../config/demo';
 import { prisma } from '../../data/prisma/client';
 import { createPlaceholderHandler } from '../_shared/createPlaceholderHandler';
+import { isReservationVehicleLinkAvailable } from '../_shared/schemaCapabilities';
+import { findVehicleById } from '../vehicles/vehicles.controller';
 import {
   calculateReservationPricing,
   findReservationService,
@@ -19,6 +21,8 @@ interface ReservationRecord {
   userId: string;
   serviceId: string;
   serviceLabel: string;
+  vehicleId?: string;
+  vehicleLabel?: string;
   date: string;
   time: string;
   status: ReservationStatus;
@@ -26,6 +30,29 @@ interface ReservationRecord {
   createdAt: Date;
   updatedAt: Date;
 }
+
+interface ReservationVehicleSnapshot {
+  name: string;
+  model: string;
+}
+
+interface ReservationQueryRecord {
+  id: string;
+  userId: string;
+  serviceType: string;
+  description: string | null;
+  status: PrismaReservationStatus;
+  scheduledAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  vehicleId: string | null;
+  vehicle: ReservationVehicleSnapshot | null;
+}
+
+type ReservationSerializableInput = Omit<ReservationQueryRecord, 'vehicleId' | 'vehicle'> & {
+  vehicleId?: string | null;
+  vehicle?: ReservationVehicleSnapshot | null;
+};
 
 const DEMO_RESERVATION_SEED = [
   {
@@ -94,23 +121,43 @@ function fromPrismaStatus(status: PrismaReservationStatus): ReservationStatus {
 }
 
 function buildScheduledAt(date: string, time: string) {
-  return new Date(`${date}T${time}:00`);
+  return new Date(`${date}T${time}:00.000Z`);
 }
 
-function serializeReservation(reservation: {
-  id: string;
-  userId: string;
-  serviceType: string;
-  description: string | null;
-  status: PrismaReservationStatus;
-  scheduledAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}) {
+function formatReservationVehicleLabel(vehicle: ReservationVehicleSnapshot | null) {
+  if (!vehicle) {
+    return undefined;
+  }
+
+  const name = vehicle.name.trim();
+  const model = vehicle.model.trim();
+
+  if (!name) {
+    return model || undefined;
+  }
+
+  if (!model || model.toLowerCase() === name.toLowerCase()) {
+    return name;
+  }
+
+  return `${name} ${model}`;
+}
+
+function toReservationQueryRecord(reservation: ReservationSerializableInput) {
+  return {
+    ...reservation,
+    vehicleId: reservation.vehicleId ?? null,
+    vehicle: reservation.vehicle ?? null
+  } satisfies ReservationQueryRecord;
+}
+
+function serializeReservation(reservation: ReservationQueryRecord) {
   return {
     id: reservation.id,
     serviceId: reservation.serviceType,
     serviceLabel: getReservationServiceLabel(reservation.serviceType),
+    vehicleId: reservation.vehicleId ?? undefined,
+    vehicleLabel: formatReservationVehicleLabel(reservation.vehicle),
     date: toIsoDate(reservation.scheduledAt),
     time: toTimeLabel(reservation.scheduledAt),
     status: fromPrismaStatus(reservation.status),
@@ -118,6 +165,110 @@ function serializeReservation(reservation: {
     createdAt: reservation.createdAt.toISOString(),
     updatedAt: reservation.updatedAt.toISOString()
   };
+}
+
+async function readReservationRowsForUser(userId: string, email?: string | null) {
+  if (!userId) {
+    return [] as ReservationQueryRecord[];
+  }
+
+  await ensureDemoReservations(userId, email);
+
+  const baseSelect = {
+    id: true,
+    userId: true,
+    serviceType: true,
+    description: true,
+    status: true,
+    scheduledAt: true,
+    createdAt: true,
+    updatedAt: true
+  } as const;
+
+  if (!(await isReservationVehicleLinkAvailable())) {
+    const reservations = await prisma.reservation.findMany({
+      where: { userId },
+      orderBy: { scheduledAt: 'asc' },
+      select: baseSelect
+    });
+
+    return reservations.map(reservation => ({
+      ...reservation,
+      vehicleId: null,
+      vehicle: null
+    }));
+  }
+
+  return prisma.reservation.findMany({
+    where: { userId },
+    orderBy: { scheduledAt: 'asc' },
+    select: {
+      ...baseSelect,
+      vehicleId: true,
+      vehicle: {
+        select: {
+          name: true,
+          model: true
+        }
+      }
+    }
+  });
+}
+
+async function findReservationRowForUser(userId: string, reservationId: string, email?: string | null) {
+  if (!userId) {
+    return null;
+  }
+
+  await ensureDemoReservations(userId, email);
+
+  const baseSelect = {
+    id: true,
+    userId: true,
+    serviceType: true,
+    description: true,
+    status: true,
+    scheduledAt: true,
+    createdAt: true,
+    updatedAt: true
+  } as const;
+
+  if (!(await isReservationVehicleLinkAvailable())) {
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        id: reservationId,
+        userId
+      },
+      select: baseSelect
+    });
+
+    if (!reservation) {
+      return null;
+    }
+
+    return {
+      ...reservation,
+      vehicleId: null,
+      vehicle: null
+    } satisfies ReservationQueryRecord;
+  }
+
+  return prisma.reservation.findFirst({
+    where: {
+      id: reservationId,
+      userId
+    },
+    select: {
+      ...baseSelect,
+      vehicleId: true,
+      vehicle: {
+        select: {
+          name: true,
+          model: true
+        }
+      }
+    }
+  });
 }
 
 async function ensureDemoReservations(userId: string, email?: string | null) {
@@ -146,35 +297,7 @@ async function ensureDemoReservations(userId: string, email?: string | null) {
 }
 
 async function readReservationsForUser(userId: string, email?: string | null) {
-  if (!userId) {
-    return [] as Array<{
-      id: string;
-      userId: string;
-      serviceType: string;
-      description: string | null;
-      status: PrismaReservationStatus;
-      scheduledAt: Date;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-  }
-
-  await ensureDemoReservations(userId, email);
-
-  return prisma.reservation.findMany({
-    where: { userId },
-    orderBy: { scheduledAt: 'asc' },
-    select: {
-      id: true,
-      userId: true,
-      serviceType: true,
-      description: true,
-      status: true,
-      scheduledAt: true,
-      createdAt: true,
-      updatedAt: true
-    }
-  });
+  return readReservationRowsForUser(userId, email);
 }
 
 export async function listReservationsForUser(userId: string, email?: string | null) {
@@ -186,6 +309,8 @@ export async function listReservationsForUser(userId: string, email?: string | n
       userId,
       serviceId: serialized.serviceId,
       serviceLabel: serialized.serviceLabel,
+      vehicleId: serialized.vehicleId,
+      vehicleLabel: serialized.vehicleLabel,
       date: serialized.date,
       time: serialized.time,
       status: serialized.status,
@@ -207,22 +332,7 @@ export async function findReservationForUser(
 
   await ensureDemoReservations(userId, email);
 
-  const reservation = await prisma.reservation.findFirst({
-    where: {
-      id: reservationId,
-      userId
-    },
-    select: {
-      id: true,
-      userId: true,
-      serviceType: true,
-      description: true,
-      status: true,
-      scheduledAt: true,
-      createdAt: true,
-      updatedAt: true
-    }
-  });
+  const reservation = await findReservationRowForUser(userId, reservationId, email);
 
   if (!reservation) {
     return null;
@@ -234,6 +344,8 @@ export async function findReservationForUser(
     userId,
     serviceId: serialized.serviceId,
     serviceLabel: serialized.serviceLabel,
+    vehicleId: serialized.vehicleId,
+    vehicleLabel: serialized.vehicleLabel,
     date: serialized.date,
     time: serialized.time,
     status: serialized.status,
@@ -329,6 +441,10 @@ export const listReservationServices = async (_req: Request, res: Response) => {
 export const listAvailableSlots = async (req: Request, res: Response) => {
   const serviceId = typeof req.query.serviceId === 'string' ? req.query.serviceId : '';
   const date = typeof req.query.date === 'string' ? req.query.date : '';
+  const excludeId =
+    typeof req.query.excludeId === 'string' && req.query.excludeId.trim()
+      ? req.query.excludeId.trim()
+      : undefined;
 
   if (!serviceId || !date) {
     res.status(400).json({
@@ -337,7 +453,7 @@ export const listAvailableSlots = async (req: Request, res: Response) => {
     return;
   }
 
-  res.json(await getAvailableSlots(serviceId, date));
+  res.json(await getAvailableSlots(serviceId, date, excludeId));
 };
 
 export const listReservations = async (_req: Request, res: Response) => {
@@ -353,6 +469,10 @@ export const createReservation = async (req: Request, res: Response) => {
   const serviceId = typeof req.body?.serviceId === 'string' ? req.body.serviceId.trim() : '';
   const date = typeof req.body?.date === 'string' ? req.body.date.trim() : '';
   const time = typeof req.body?.time === 'string' ? req.body.time.trim() : '';
+  const vehicleId =
+    typeof req.body?.vehicleId === 'string' && req.body.vehicleId.trim()
+      ? req.body.vehicleId.trim()
+      : null;
   const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : null;
 
   if (!serviceId || !date || !time) {
@@ -370,6 +490,16 @@ export const createReservation = async (req: Request, res: Response) => {
     return;
   }
 
+  if (vehicleId) {
+    const vehicle = await findVehicleById(userId, vehicleId);
+    if (!vehicle) {
+      res.status(404).json({
+        message: 'Vehicule introuvable pour cet utilisateur'
+      });
+      return;
+    }
+  }
+
   const availableSlots = await getAvailableSlots(serviceId, date);
   if (!availableSlots.includes(time)) {
     res.status(409).json({
@@ -380,30 +510,52 @@ export const createReservation = async (req: Request, res: Response) => {
 
   const scheduledAt = buildScheduledAt(date, time);
   const pricing = calculateReservationPricing(serviceId);
+  const canLinkVehicle = await isReservationVehicleLinkAvailable();
 
   const reservation = await prisma.reservation.create({
     data: {
       userId,
       serviceType: service.id,
+      ...(canLinkVehicle ? { vehicleId } : {}),
       description: notes,
       status: PrismaReservationStatus.CONFIRMED,
       scheduledAt,
       amount: new Prisma.Decimal(pricing.totalAmount.toFixed(2)),
       currency: 'CAD'
     },
-    select: {
-      id: true,
-      userId: true,
-      serviceType: true,
-      description: true,
-      status: true,
-      scheduledAt: true,
-      createdAt: true,
-      updatedAt: true
-    }
+    select: canLinkVehicle
+      ? {
+          id: true,
+          userId: true,
+          serviceType: true,
+          vehicleId: true,
+          vehicle: {
+            select: {
+              name: true,
+              model: true
+            }
+          },
+          description: true,
+          status: true,
+          scheduledAt: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      : {
+          id: true,
+          userId: true,
+          serviceType: true,
+          description: true,
+          status: true,
+          scheduledAt: true,
+          createdAt: true,
+          updatedAt: true
+        }
   });
 
-  res.status(201).json(serializeReservation(reservation));
+  res.status(201).json(
+    serializeReservation(toReservationQueryRecord(reservation))
+  );
 };
 
 export const getReservationById = async (req: Request, res: Response) => {
@@ -447,6 +599,10 @@ export const updateReservation = async (req: Request, res: Response) => {
     typeof req.body?.time === 'string' && req.body.time.trim()
       ? req.body.time.trim()
       : existingReservation.time;
+  const nextVehicleId =
+    typeof req.body?.vehicleId === 'string'
+      ? req.body.vehicleId.trim() || null
+      : existingReservation.vehicleId ?? null;
 
   const service = findReservationService(nextServiceId);
   if (!service) {
@@ -454,6 +610,16 @@ export const updateReservation = async (req: Request, res: Response) => {
       message: `Unknown reservation service: ${nextServiceId}`
     });
     return;
+  }
+
+  if (nextVehicleId) {
+    const vehicle = await findVehicleById(userId, nextVehicleId);
+    if (!vehicle) {
+      res.status(404).json({
+        message: 'Vehicule introuvable pour cet utilisateur'
+      });
+      return;
+    }
   }
 
   const slotChanged =
@@ -474,30 +640,52 @@ export const updateReservation = async (req: Request, res: Response) => {
   const nextStatus =
     typeof req.body?.status === 'string' ? toPrismaStatus(req.body.status) : null;
   const pricing = calculateReservationPricing(nextServiceId);
+  const canLinkVehicle = await isReservationVehicleLinkAvailable();
 
   const reservation = await prisma.reservation.update({
     where: { id: existingReservation.id },
     data: {
       serviceType: service.id,
+      ...(canLinkVehicle ? { vehicleId: nextVehicleId } : {}),
       description: typeof req.body?.notes === 'string' ? req.body.notes.trim() || null : existingReservation.notes ?? null,
       status: nextStatus ?? toPrismaStatus(existingReservation.status) ?? PrismaReservationStatus.CONFIRMED,
       scheduledAt: buildScheduledAt(nextDate, nextTime),
       amount: new Prisma.Decimal(pricing.totalAmount.toFixed(2)),
       currency: 'CAD'
     },
-    select: {
-      id: true,
-      userId: true,
-      serviceType: true,
-      description: true,
-      status: true,
-      scheduledAt: true,
-      createdAt: true,
-      updatedAt: true
-    }
+    select: canLinkVehicle
+      ? {
+          id: true,
+          userId: true,
+          serviceType: true,
+          vehicleId: true,
+          vehicle: {
+            select: {
+              name: true,
+              model: true
+            }
+          },
+          description: true,
+          status: true,
+          scheduledAt: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      : {
+          id: true,
+          userId: true,
+          serviceType: true,
+          description: true,
+          status: true,
+          scheduledAt: true,
+          createdAt: true,
+          updatedAt: true
+        }
   });
 
-  res.json(serializeReservation(reservation));
+  res.json(
+    serializeReservation(toReservationQueryRecord(reservation))
+  );
 };
 
 export const uploadReservationPhoto = createPlaceholderHandler('reservations', 'uploadPhoto');

@@ -55,3 +55,7 @@ export function isCurrentTutorialSchemaAvailable() {
     'updatedAt'
   ]);
 }
+
+export function isReservationVehicleLinkAvailable() {
+  return tableHasColumns('Reservation', ['vehicleId']);
+}

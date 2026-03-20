@@ -3,7 +3,7 @@
     <ActionBar class="action-bar">
       <GridLayout columns="40,*" class="action-bar-content">
         <Label text="<" col="0" class="icon-back" @tap="goBack" />
-        <Label text="Reservation" col="1" class="action-title" />
+        <Label :text="actionTitle" col="1" class="action-title" />
       </GridLayout>
     </ActionBar>
 
@@ -15,9 +15,9 @@
           </GridLayout>
 
           <StackLayout class="intro-card">
-            <Label text="Prendre un rendez-vous" class="intro-title" />
+            <Label :text="introTitle" class="intro-title" />
             <Label
-              text="Choisissez un service, une date puis un creneau disponible."
+              :text="introText"
               class="intro-text"
               textWrap="true"
             />
@@ -42,6 +42,35 @@
                 <Label :text="formatServiceReviews(service)" class="service-rating" />
               </StackLayout>
               <Label col="1" :text="selectedServiceId === service.id ? 'OK' : '+'" class="service-badge" />
+            </GridLayout>
+          </StackLayout>
+
+          <Label text="Choisir le vehicule" class="section-title" />
+          <StackLayout v-if="vehicles.length > 0" class="vehicle-list">
+            <GridLayout
+              v-for="vehicle in vehicles"
+              :key="vehicle.id"
+              columns="*,auto"
+              class="vehicle-item"
+              :class="{ selected: selectedVehicleId === vehicle.id }"
+              @tap="selectVehicle(vehicle.id)"
+            >
+              <StackLayout col="0">
+                <Label :text="vehicle.name" class="vehicle-text" />
+                <Label :text="formatVehicleLabel(vehicle)" class="vehicle-meta" />
+              </StackLayout>
+              <Label col="1" :text="selectedVehicleId === vehicle.id ? 'OK' : '+'" class="service-badge" />
+            </GridLayout>
+          </StackLayout>
+          <StackLayout v-else class="empty-vehicle-card">
+            <Label text="Aucun vehicule enregistre." class="empty-vehicle-title" />
+            <Label
+              text="Ajoutez d abord un vehicule pour relier les entretiens, documents et assurances au bon dossier."
+              class="empty-vehicle-copy"
+              textWrap="true"
+            />
+            <GridLayout class="empty-vehicle-cta" @tap="navigateTo('vehicles')">
+              <Label text="Gerer mes vehicules" class="empty-vehicle-cta-text" />
             </GridLayout>
           </StackLayout>
 
@@ -87,6 +116,7 @@
           <StackLayout class="summary-card">
             <Label text="Recapitulatif" class="summary-title" />
             <Label :text="'Service : ' + selectedServiceLabel" class="summary-line" />
+            <Label :text="'Vehicule : ' + selectedVehicleLabel" class="summary-line" />
             <Label :text="'Date : ' + selectedDateLabel" class="summary-line" />
             <Label :text="'Heure : ' + selectedTimeLabel" class="summary-line" />
           </StackLayout>
@@ -94,9 +124,9 @@
           <GridLayout
             class="cta"
             :class="{ disabled: !canSubmit }"
-            @tap="createReservation"
+            @tap="submitReservation"
           >
-            <Label :text="isSubmitting ? 'Confirmation...' : 'Continuer'" class="cta-text" />
+            <Label :text="ctaLabel" class="cta-text" />
           </GridLayout>
         </StackLayout>
       </ScrollView>
@@ -126,9 +156,16 @@
 import { alert } from '@nativescript/core'
 import { computed, ref } from 'nativescript-vue'
 import ReservationService from '@/services/ReservationService'
+import VehicleService from '@/services/VehicleService'
 import { formatCurrency } from '@/utils/ui'
 import { goBack as navigateBack, navigateToPage, type AppPage } from '@/utils/navigation'
-import type { ReservationServiceOption } from '@/types/reservation'
+import type { Reservation, ReservationServiceOption } from '@/types/reservation'
+import type { Vehicle } from '@/types/vehicle'
+
+const props = defineProps<{
+  reservationToEdit?: Reservation
+  onReservationUpdated?: (() => void | Promise<void>) | undefined
+}>()
 
 interface DateOption {
   isoDate: string
@@ -161,6 +198,17 @@ function buildDateOptions(days: number): DateOption[] {
   return options
 }
 
+function buildDateOption(isoDate: string): DateOption {
+  const [year, month, day] = isoDate.split('-').map(value => Number(value))
+  const date = new Date(year, Math.max(month - 1, 0), day, 12, 0, 0)
+
+  return {
+    isoDate,
+    weekday: WEEKDAY_LABELS[date.getDay()],
+    label: `${`${day}`.padStart(2, '0')} ${MONTH_LABELS[date.getMonth()]}`
+  }
+}
+
 function formatServiceReviews(service: ReservationServiceOption) {
   const reviewCount = Number(service.reviewCount ?? 0)
   const reviewAverage = Number(service.reviewAverage ?? 0)
@@ -172,12 +220,14 @@ function formatServiceReviews(service: ReservationServiceOption) {
   return `Note ${reviewAverage.toFixed(1)}/5 - ${reviewCount} avis`
 }
 
-const dateOptions = buildDateOptions(6)
-const initialDate = dateOptions[0]?.isoDate ?? ''
+const dateOptions = ref<DateOption[]>([])
+const initialDate = buildDateOptions(6)[0]?.isoDate ?? ''
 
 const services = ref<ReservationServiceOption[]>(ReservationService.getFallbackServices())
+const vehicles = ref<Vehicle[]>([])
 const availableSlots = ref<string[]>([])
 const selectedServiceId = ref<string | null>(null)
+const selectedVehicleId = ref<string | null>(null)
 const selectedDate = ref<string>(initialDate)
 const selectedTime = ref<string | null>(null)
 const isSubmitting = ref(false)
@@ -186,20 +236,68 @@ const selectedService = computed(() => {
   return services.value.find(service => service.id === selectedServiceId.value) ?? null
 })
 
+const isEditing = computed(() => Boolean(props.reservationToEdit?.id))
+const actionTitle = computed(() => (isEditing.value ? 'Modifier RDV' : 'Reservation'))
+const introTitle = computed(() =>
+  isEditing.value ? 'Modifier votre rendez-vous' : 'Prendre un rendez-vous'
+)
+const introText = computed(() =>
+  isEditing.value
+    ? 'Ajustez le service, le vehicule, la date et le creneau selon les disponibilites.'
+    : 'Choisissez un service, une date puis un creneau disponible.'
+)
+const ctaLabel = computed(() => {
+  if (isSubmitting.value) {
+    return isEditing.value ? 'Mise a jour...' : 'Confirmation...'
+  }
+
+  return isEditing.value ? 'Enregistrer les modifications' : 'Continuer'
+})
+
 const selectedDateOption = computed(() => {
-  return dateOptions.find(option => option.isoDate === selectedDate.value) ?? null
+  return dateOptions.value.find(option => option.isoDate === selectedDate.value) ?? null
+})
+
+const selectedVehicle = computed(() => {
+  return vehicles.value.find(vehicle => vehicle.id === selectedVehicleId.value) ?? null
 })
 
 const selectedServiceLabel = computed(() => selectedService.value?.label ?? 'Aucun service')
+const selectedVehicleLabel = computed(() => {
+  if (!selectedVehicle.value) {
+    return vehicles.value.length > 0 ? 'Aucun vehicule' : 'Aucun vehicule enregistre'
+  }
+
+  return formatVehicleLabel(selectedVehicle.value)
+})
 const selectedDateLabel = computed(() => selectedDateOption.value?.label ?? 'Aucune date')
 const selectedTimeLabel = computed(() => selectedTime.value ?? 'Aucune heure')
+const requiresVehicleSelection = computed(() => vehicles.value.length > 0)
 const canSubmit = computed(() => {
-  return Boolean(selectedServiceId.value && selectedDate.value && selectedTime.value && !isSubmitting.value)
+  return Boolean(
+    selectedServiceId.value &&
+      selectedDate.value &&
+      selectedTime.value &&
+      (!requiresVehicleSelection.value || selectedVehicleId.value) &&
+      !isSubmitting.value
+  )
 })
 
 async function loadServices() {
   services.value = ReservationService.getFallbackServices()
   services.value = await ReservationService.getServices()
+}
+
+async function loadVehicles() {
+  vehicles.value = await VehicleService.getVehicles()
+
+  if (!selectedVehicleId.value && vehicles.value.length > 0) {
+    selectedVehicleId.value = vehicles.value[0].id
+  }
+
+  if (selectedVehicleId.value && !vehicles.value.some(vehicle => vehicle.id === selectedVehicleId.value)) {
+    selectedVehicleId.value = vehicles.value[0]?.id ?? null
+  }
 }
 
 async function refreshSlots() {
@@ -209,14 +307,18 @@ async function refreshSlots() {
     return
   }
 
+  const excludeId = props.reservationToEdit?.id
+
   availableSlots.value = ReservationService.getFallbackAvailableSlots(
     selectedServiceId.value,
-    selectedDate.value
+    selectedDate.value,
+    excludeId
   )
 
   availableSlots.value = await ReservationService.getAvailableSlots(
     selectedServiceId.value,
-    selectedDate.value
+    selectedDate.value,
+    excludeId
   )
 
   if (!availableSlots.value.includes(selectedTime.value ?? '')) {
@@ -224,8 +326,34 @@ async function refreshSlots() {
   }
 }
 
+function initializeSelectionFromProps() {
+  if (!props.reservationToEdit) {
+    return
+  }
+
+  selectedServiceId.value = props.reservationToEdit.serviceId
+  selectedVehicleId.value = props.reservationToEdit.vehicleId ?? null
+  selectedDate.value = props.reservationToEdit.date
+  selectedTime.value = props.reservationToEdit.time
+}
+
+function syncDateOptions() {
+  const nextDateOptions = buildDateOptions(6)
+  if (selectedDate.value && !nextDateOptions.some(option => option.isoDate === selectedDate.value)) {
+    nextDateOptions.unshift(buildDateOption(selectedDate.value))
+    nextDateOptions.sort((left, right) => left.isoDate.localeCompare(right.isoDate))
+  }
+
+  dateOptions.value = nextDateOptions
+}
+
 async function onPageLoaded() {
-  await loadServices()
+  initializeSelectionFromProps()
+  syncDateOptions()
+  await Promise.all([loadServices(), loadVehicles()])
+  if (selectedServiceId.value && selectedDate.value) {
+    await refreshSlots()
+  }
   console.log('Reservations page loaded')
 }
 
@@ -243,11 +371,22 @@ function selectTime(slot: string) {
   selectedTime.value = slot
 }
 
+function selectVehicle(vehicleId: string) {
+  selectedVehicleId.value = vehicleId
+}
+
+function formatVehicleLabel(vehicle: Vehicle) {
+  const details = [vehicle.model?.trim(), vehicle.licensePlate?.trim()].filter(Boolean)
+  return details.length > 0 ? details.join(' - ') : vehicle.name
+}
+
 async function createReservation() {
   if (!canSubmit.value || !selectedService.value) {
     await alert({
-      title: 'Reservation incomplete',
-      message: 'Choisissez un service, une date et une heure avant de continuer.',
+      title: isEditing.value ? 'Modification incomplete' : 'Reservation incomplete',
+      message: requiresVehicleSelection.value
+        ? 'Choisissez un service, un vehicule, une date et une heure avant de continuer.'
+        : 'Choisissez un service, une date et une heure avant de continuer.',
       okButtonText: 'OK'
     })
     return
@@ -259,6 +398,7 @@ async function createReservation() {
     const reservation = await ReservationService.createReservation({
       serviceId: selectedService.value.id,
       serviceLabel: selectedService.value.label,
+      vehicleId: selectedVehicleId.value ?? undefined,
       date: selectedDate.value,
       time: selectedTime.value as string
     })
@@ -282,6 +422,56 @@ async function createReservation() {
   } finally {
     isSubmitting.value = false
   }
+}
+
+async function updateReservation() {
+  if (!canSubmit.value || !selectedService.value || !props.reservationToEdit) {
+    await createReservation()
+    return
+  }
+
+  try {
+    isSubmitting.value = true
+
+    const reservation = await ReservationService.updateReservation(props.reservationToEdit.id, {
+      serviceId: selectedService.value.id,
+      vehicleId: selectedVehicleId.value ?? undefined,
+      date: selectedDate.value,
+      time: selectedTime.value as string
+    })
+
+    await alert({
+      title: 'Rendez-vous modifie',
+      message: `${reservation.serviceLabel} repositionne le ${selectedDateLabel.value} a ${reservation.time}.`,
+      okButtonText: 'OK'
+    })
+
+    try {
+      await props.onReservationUpdated?.()
+    } catch (refreshError) {
+      console.warn('Unable to refresh appointments after update:', refreshError)
+    }
+
+    goBack()
+  } catch (error) {
+    console.error('Reservation update failed:', error)
+    await alert({
+      title: 'Erreur',
+      message: 'Impossible de modifier le rendez-vous pour le moment.',
+      okButtonText: 'OK'
+    })
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+async function submitReservation() {
+  if (isEditing.value) {
+    await updateReservation()
+    return
+  }
+
+  await createReservation()
 }
 
 function navigateTo(page: AppPage) {
@@ -377,6 +567,10 @@ function goBack() {
   margin-bottom: 18;
 }
 
+.vehicle-list {
+  margin-bottom: 18;
+}
+
 .service-item {
   background-color: #ffffff;
   border-radius: 12;
@@ -388,6 +582,21 @@ function goBack() {
 }
 
 .service-item.selected {
+  border-color: #dc2626;
+  background-color: #fff1f2;
+}
+
+.vehicle-item {
+  background-color: #ffffff;
+  border-radius: 12;
+  padding: 14 16;
+  margin-bottom: 10;
+  vertical-align: center;
+  border-width: 1;
+  border-color: #e5e7eb;
+}
+
+.vehicle-item.selected {
   border-color: #dc2626;
   background-color: #fff1f2;
 }
@@ -409,6 +618,18 @@ function goBack() {
   color: #b45309;
   margin-top: 4;
   font-weight: 700;
+}
+
+.vehicle-text {
+  font-size: 15;
+  color: #111827;
+  font-weight: 700;
+}
+
+.vehicle-meta {
+  font-size: 12;
+  color: #6b7280;
+  margin-top: 4;
 }
 
 .service-badge {
@@ -476,6 +697,39 @@ function goBack() {
   font-size: 12;
   margin-top: -6;
   margin-bottom: 16;
+}
+
+.empty-vehicle-card {
+  background-color: #ffffff;
+  border-radius: 14;
+  padding: 16;
+  margin-bottom: 18;
+}
+
+.empty-vehicle-title {
+  color: #111827;
+  font-size: 15;
+  font-weight: 700;
+  margin-bottom: 6;
+}
+
+.empty-vehicle-copy {
+  color: #6b7280;
+  font-size: 12;
+  margin-bottom: 14;
+}
+
+.empty-vehicle-cta {
+  background-color: #1f2733;
+  border-radius: 12;
+  padding: 13 14;
+}
+
+.empty-vehicle-cta-text {
+  color: #ffffff;
+  font-size: 14;
+  font-weight: 700;
+  text-align: center;
 }
 
 .summary-card {
