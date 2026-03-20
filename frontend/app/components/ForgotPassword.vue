@@ -4,6 +4,9 @@
       <GridLayout row="0" class="hero-panel">
         <GridLayout class="hero-glow hero-glow-left" />
         <GridLayout class="hero-glow hero-glow-right" />
+        <GridLayout class="back-pill" @tap="goBack">
+          <Label text="<" class="back-pill-text" />
+        </GridLayout>
 
         <StackLayout class="hero-copy">
           <Label text="Recuperation d'acces" class="hero-kicker" />
@@ -143,7 +146,7 @@
 <script lang="ts" setup>
 import { computed, ref } from 'nativescript-vue'
 import AuthService from '@/services/AuthService'
-import { navigateToPage } from '@/utils/navigation'
+import { goBack as navigateBack, navigateToPage } from '@/utils/navigation'
 
 const demoCredentials = AuthService.getDemoCredentials()
 
@@ -221,6 +224,10 @@ function goToLogin() {
   void navigateToPage('login', { currentPage: 'forgotPassword' })
 }
 
+function goBack() {
+  void navigateBack()
+}
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message
@@ -234,6 +241,21 @@ function getErrorMessage(error: unknown) {
 .page { background-color: #111827; }
 .page-shell { background-color: #111827; }
 .hero-panel { background-color: #181f2d; padding: 26 22 22 22; overflow: hidden; }
+.back-pill {
+  width: 40;
+  height: 40;
+  border-radius: 20;
+  background-color: rgba(255, 255, 255, 0.1);
+  horizontal-align: left;
+  vertical-align: top;
+}
+.back-pill-text {
+  color: #ffffff;
+  font-size: 20;
+  font-weight: 800;
+  text-align: center;
+  vertical-align: center;
+}
 .hero-glow { width: 160; height: 160; border-radius: 80; opacity: 0.88; }
 .hero-glow-left { background-color: rgba(220, 38, 38, 0.92); horizontal-align: left; vertical-align: top; margin-left: -58; margin-top: -56; }
 .hero-glow-right { background-color: rgba(255, 255, 255, 0.08); horizontal-align: right; vertical-align: bottom; margin-right: -70; margin-bottom: -50; }

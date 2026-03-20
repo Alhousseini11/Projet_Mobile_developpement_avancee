@@ -10,6 +10,10 @@
     <GridLayout rows="*,64" class="page-body">
       <ScrollView row="0">
         <StackLayout class="content">
+          <GridLayout class="inline-back" @tap="goBack">
+            <Label text="< Retour" class="inline-back-text" />
+          </GridLayout>
+
           <StackLayout class="intro-card">
             <Label text="Prendre un rendez-vous" class="intro-title" />
             <Label
@@ -323,6 +327,20 @@ function goBack() {
 
 .content {
   padding: 16 16 24 16;
+}
+
+.inline-back {
+  width: 92;
+  background-color: #ffffff;
+  border-radius: 999;
+  padding: 10 14;
+  margin-bottom: 14;
+}
+
+.inline-back-text {
+  color: #1f2733;
+  font-size: 13;
+  font-weight: 800;
 }
 
 .intro-card {

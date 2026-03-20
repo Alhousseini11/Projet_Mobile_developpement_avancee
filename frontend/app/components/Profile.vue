@@ -10,6 +10,10 @@
     <GridLayout rows="*,64" class="page-body">
       <ScrollView row="0">
         <StackLayout class="content">
+          <GridLayout class="inline-back" @tap="goBack">
+            <Label text="< Retour" class="inline-back-text" />
+          </GridLayout>
+
           <GridLayout columns="76,*" class="profile-hero">
             <GridLayout col="0" class="avatar-shell">
               <Label :text="profileInitials" class="avatar-text" />
@@ -266,6 +270,22 @@ function goBack() {
 .action-title { font-size: 18; font-weight: 700; color: #fff; vertical-align: center; }
 .page-body { background-color: #eef1f5; }
 .content { padding: 16 16 24 16; }
+.inline-back {
+  width: 92;
+  background-color: #ffffff;
+  border-radius: 999;
+  padding: 10 14;
+  margin-bottom: 14;
+  shadow-color: #000;
+  shadow-opacity: 0.05;
+  shadow-radius: 8;
+  shadow-offset: 0 2;
+}
+.inline-back-text {
+  color: #1f2733;
+  font-size: 13;
+  font-weight: 800;
+}
 .profile-hero { background-color: #ffffff; border-radius: 18; padding: 18; margin-bottom: 14; shadow-color: #000; shadow-opacity: 0.08; shadow-radius: 12; shadow-offset: 0 3; }
 .avatar-shell { width: 56; height: 56; border-radius: 28; background-color: #dc2626; vertical-align: top; }
 .avatar-text { color: #ffffff; font-size: 18; font-weight: 800; text-align: center; vertical-align: center; }
