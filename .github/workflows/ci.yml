@@ -10,6 +10,8 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
+    env:
+      CI_DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_db?schema=public
     defaults:
       run:
         working-directory: backend
@@ -28,9 +30,13 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
+        env:
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
         run: npx prisma generate
 
       - name: Validate Prisma schema
+        env:
+          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
         run: npm run prisma:validate
 
       - name: Build backend
