@@ -38,7 +38,6 @@
               <TextField
                 v-model="email"
                 hint="client@example.com"
-                keyboardType="email"
                 autocorrect="false"
                 autocapitalizationType="none"
                 class="field-input"

@@ -23,14 +23,25 @@
             />
           </StackLayout>
 
-          <Label text="Services" class="section-title" />
+          <GridLayout columns="*,auto" class="section-title-row">
+            <Label text="Services" col="0" class="section-title" />
+            <GridLayout
+              v-if="!isEditing"
+              col="1"
+              class="multi-toggle"
+              :class="{ active: multiServiceMode }"
+              @tap="toggleMultiServiceMode"
+            >
+              <Label :text="multiServiceMode ? 'Multi ON' : 'Multi'" class="multi-toggle-text" />
+            </GridLayout>
+          </GridLayout>
           <StackLayout class="service-list">
             <GridLayout
               v-for="service in services"
               :key="service.id"
               columns="*,auto"
               class="service-item"
-              :class="{ selected: selectedServiceId === service.id }"
+              :class="{ selected: selectedServiceId === service.id || (!isEditing && multiServiceMode && selectedServiceIds.includes(service.id)) }"
               @tap="selectService(service.id)"
             >
               <StackLayout col="0">
@@ -41,8 +52,17 @@
                 />
                 <Label :text="formatServiceReviews(service)" class="service-rating" />
               </StackLayout>
-              <Label col="1" :text="selectedServiceId === service.id ? 'OK' : '+'" class="service-badge" />
+              <Label
+                col="1"
+                :text="(!isEditing && multiServiceMode && selectedServiceIds.includes(service.id)) ? '✓' : (selectedServiceId === service.id ? 'OK' : '+')"
+                class="service-badge"
+              />
             </GridLayout>
+
+            <StackLayout v-if="!isEditing && multiServiceMode && selectedServiceIds.length > 0" class="selected-services-card">
+              <Label text="Services choisis" class="selected-services-title" />
+              <Label :text="selectedServicesLabel" class="selected-services-copy" textWrap="true" />
+            </StackLayout>
           </StackLayout>
 
           <Label text="Choisir le vehicule" class="section-title" />
@@ -115,7 +135,7 @@
 
           <StackLayout class="summary-card">
             <Label text="Recapitulatif" class="summary-title" />
-            <Label :text="'Service : ' + selectedServiceLabel" class="summary-line" />
+            <Label :text="'Service : ' + selectedServicesSummaryLabel" class="summary-line" textWrap="true" />
             <Label :text="'Vehicule : ' + selectedVehicleLabel" class="summary-line" />
             <Label :text="'Date : ' + selectedDateLabel" class="summary-line" />
             <Label :text="'Heure : ' + selectedTimeLabel" class="summary-line" />
@@ -133,19 +153,34 @@
 
       <GridLayout row="1" columns="*,*,*,*,*" class="bottom-nav">
         <GridLayout col="0" class="nav-item" @tap="navigateTo('home')">
-          <Label text="Accueil" class="nav-label" />
+          <StackLayout class="nav-stack">
+            <Label text="🏠" class="nav-icon" />
+            <Label text="Accueil" class="nav-label" />
+          </StackLayout>
         </GridLayout>
         <GridLayout col="1" class="nav-item active" @tap="navigateTo('reservations')">
-          <Label text="Reserver" class="nav-label" />
+          <StackLayout class="nav-stack">
+            <Label text="📅" class="nav-icon" />
+            <Label text="Reserver" class="nav-label" />
+          </StackLayout>
         </GridLayout>
         <GridLayout col="2" class="nav-item" @tap="navigateTo('tutorials')">
-          <Label text="Tutoriels" class="nav-label" />
+          <StackLayout class="nav-stack">
+            <Label text="🎥" class="nav-icon" />
+            <Label text="Tutoriels" class="nav-label" />
+          </StackLayout>
         </GridLayout>
         <GridLayout col="3" class="nav-item" @tap="navigateTo('vehicles')">
-          <Label text="Vehicules" class="nav-label" />
+          <StackLayout class="nav-stack">
+            <Label text="🚗" class="nav-icon" />
+            <Label text="Vehicules" class="nav-label" />
+          </StackLayout>
         </GridLayout>
         <GridLayout col="4" class="nav-item" @tap="navigateTo('profile')">
-          <Label text="Profil" class="nav-label" />
+          <StackLayout class="nav-stack">
+            <Label text="👤" class="nav-icon" />
+            <Label text="Profil" class="nav-label" />
+          </StackLayout>
         </GridLayout>
       </GridLayout>
     </GridLayout>
@@ -227,6 +262,8 @@ const services = ref<ReservationServiceOption[]>(ReservationService.getFallbackS
 const vehicles = ref<Vehicle[]>([])
 const availableSlots = ref<string[]>([])
 const selectedServiceId = ref<string | null>(null)
+const selectedServiceIds = ref<string[]>([])
+const multiServiceMode = ref(false)
 const selectedVehicleId = ref<string | null>(null)
 const selectedDate = ref<string>(initialDate)
 const selectedTime = ref<string | null>(null)
@@ -251,6 +288,10 @@ const ctaLabel = computed(() => {
     return isEditing.value ? 'Mise a jour...' : 'Confirmation...'
   }
 
+  if (!isEditing.value && multiServiceMode.value && selectedServiceIds.value.length > 1) {
+    return `Confirmer ${selectedServiceIds.value.length} services`
+  }
+
   return isEditing.value ? 'Enregistrer les modifications' : 'Continuer'
 })
 
@@ -263,6 +304,24 @@ const selectedVehicle = computed(() => {
 })
 
 const selectedServiceLabel = computed(() => selectedService.value?.label ?? 'Aucun service')
+const selectedServicesLabel = computed(() => {
+  if (selectedServiceIds.value.length === 0) {
+    return selectedServiceLabel.value
+  }
+
+  const labels = selectedServiceIds.value
+    .map(serviceId => services.value.find(service => service.id === serviceId)?.label)
+    .filter((label): label is string => Boolean(label))
+
+  return labels.join(' • ')
+})
+const selectedServicesSummaryLabel = computed(() => {
+  if (isEditing.value || !multiServiceMode.value) {
+    return selectedServiceLabel.value
+  }
+
+  return selectedServicesLabel.value
+})
 const selectedVehicleLabel = computed(() => {
   if (!selectedVehicle.value) {
     return vehicles.value.length > 0 ? 'Aucun vehicule' : 'Aucun vehicule enregistre'
@@ -274,8 +333,14 @@ const selectedDateLabel = computed(() => selectedDateOption.value?.label ?? 'Auc
 const selectedTimeLabel = computed(() => selectedTime.value ?? 'Aucune heure')
 const requiresVehicleSelection = computed(() => vehicles.value.length > 0)
 const canSubmit = computed(() => {
+  const hasServiceSelection = isEditing.value
+    ? Boolean(selectedServiceId.value)
+    : (multiServiceMode.value
+      ? Boolean(selectedServiceIds.value.length > 0 || selectedServiceId.value)
+      : Boolean(selectedServiceId.value))
+
   return Boolean(
-    selectedServiceId.value &&
+    hasServiceSelection &&
       selectedDate.value &&
       selectedTime.value &&
       (!requiresVehicleSelection.value || selectedVehicleId.value) &&
@@ -332,9 +397,22 @@ function initializeSelectionFromProps() {
   }
 
   selectedServiceId.value = props.reservationToEdit.serviceId
+  selectedServiceIds.value = [props.reservationToEdit.serviceId]
   selectedVehicleId.value = props.reservationToEdit.vehicleId ?? null
   selectedDate.value = props.reservationToEdit.date
   selectedTime.value = props.reservationToEdit.time
+}
+
+function toggleMultiServiceMode() {
+  if (isEditing.value) {
+    return
+  }
+
+  multiServiceMode.value = !multiServiceMode.value
+
+  if (!multiServiceMode.value) {
+    selectedServiceIds.value = []
+  }
 }
 
 function syncDateOptions() {
@@ -358,7 +436,33 @@ async function onPageLoaded() {
 }
 
 async function selectService(serviceId: string) {
+  if (!isEditing.value && multiServiceMode.value) {
+    if (selectedServiceIds.value.includes(serviceId)) {
+      selectedServiceIds.value = selectedServiceIds.value.filter(id => id !== serviceId)
+      if (selectedServiceId.value === serviceId) {
+        selectedServiceId.value = selectedServiceIds.value[0] ?? null
+      }
+    } else {
+      selectedServiceIds.value = [...selectedServiceIds.value, serviceId]
+      selectedServiceId.value = serviceId
+    }
+
+    if (selectedServiceId.value) {
+      await refreshSlots()
+    } else {
+      availableSlots.value = []
+      selectedTime.value = null
+    }
+
+    return
+  }
+
   selectedServiceId.value = serviceId
+
+  if (!isEditing.value && !multiServiceMode.value) {
+    selectedServiceIds.value = []
+  }
+
   await refreshSlots()
 }
 
@@ -381,7 +485,7 @@ function formatVehicleLabel(vehicle: Vehicle) {
 }
 
 async function createReservation() {
-  if (!canSubmit.value || !selectedService.value) {
+  if (!canSubmit.value) {
     await alert({
       title: isEditing.value ? 'Modification incomplete' : 'Reservation incomplete',
       message: requiresVehicleSelection.value
@@ -395,21 +499,42 @@ async function createReservation() {
   try {
     isSubmitting.value = true
 
-    const reservation = await ReservationService.createReservation({
-      serviceId: selectedService.value.id,
-      serviceLabel: selectedService.value.label,
-      vehicleId: selectedVehicleId.value ?? undefined,
-      date: selectedDate.value,
-      time: selectedTime.value as string
-    })
+    const serviceIdsToBook = multiServiceMode.value
+      ? (selectedServiceIds.value.length > 0
+        ? selectedServiceIds.value
+        : (selectedServiceId.value ? [selectedServiceId.value] : []))
+      : (selectedServiceId.value ? [selectedServiceId.value] : [])
+
+    if (serviceIdsToBook.length === 0) {
+      throw new Error('Aucun service selectionne.')
+    }
+
+    const selectedServices = serviceIdsToBook
+      .map(serviceId => services.value.find(service => service.id === serviceId))
+      .filter((service): service is ReservationServiceOption => Boolean(service))
+
+    for (const service of selectedServices) {
+      await ReservationService.createReservation({
+        serviceId: service.id,
+        serviceLabel: service.label,
+        vehicleId: selectedVehicleId.value ?? undefined,
+        date: selectedDate.value,
+        time: selectedTime.value as string
+      })
+    }
+
+    const confirmationLabel = selectedServices.length > 1
+      ? `${selectedServices.length} services`
+      : (selectedServices[0]?.label ?? 'Service')
 
     await alert({
       title: 'Reservation confirmee',
-      message: `${reservation.serviceLabel} reservee le ${selectedDateLabel.value} a ${reservation.time}.`,
+      message: `${confirmationLabel} reserves le ${selectedDateLabel.value} a ${selectedTime.value}.`,
       okButtonText: 'OK'
     })
 
     selectedServiceId.value = null
+    selectedServiceIds.value = []
     selectedTime.value = null
     availableSlots.value = []
   } catch (error) {
@@ -563,8 +688,60 @@ function goBack() {
   margin-bottom: 10;
 }
 
+.section-title-row {
+  margin-bottom: 10;
+}
+
+.section-title-row .section-title {
+  margin-bottom: 0;
+  vertical-align: center;
+}
+
+.multi-toggle {
+  background-color: #e5e7eb;
+  border-radius: 999;
+  padding: 6 10;
+  min-width: 58;
+}
+
+.multi-toggle.active {
+  background-color: #fee2e2;
+}
+
+.multi-toggle-text {
+  color: #374151;
+  font-size: 11;
+  font-weight: 800;
+  text-align: center;
+}
+
+.multi-toggle.active .multi-toggle-text {
+  color: #b91c1c;
+}
+
 .service-list {
   margin-bottom: 18;
+}
+
+.selected-services-card {
+  background-color: #fff7ed;
+  border-radius: 10;
+  border-width: 1;
+  border-color: #fdba74;
+  padding: 10 12;
+}
+
+.selected-services-title {
+  color: #9a3412;
+  font-size: 12;
+  font-weight: 800;
+  margin-bottom: 4;
+}
+
+.selected-services-copy {
+  color: #7c2d12;
+  font-size: 12;
+  font-weight: 600;
 }
 
 .vehicle-list {
@@ -779,14 +956,33 @@ function goBack() {
 .nav-item {
   align-items: center;
   justify-content: center;
-  padding: 10 4 4 4;
+  padding: 8 2 6 2;
+}
+
+.nav-stack {
+  horizontal-align: center;
+  vertical-align: center;
+  height: 60;
+}
+
+.nav-icon {
+  font-size: 22;
+  text-align: center;
+  color: #f0f2f6;
+  margin-bottom: 4;
+  vertical-align: top;
 }
 
 .nav-label {
-  font-size: 12;
-  color: #9ca3af;
-  font-weight: 600;
+  font-size: 11;
+  font-weight: 700;
   text-align: center;
+  color: #f0f2f6;
+  vertical-align: bottom;
+}
+
+.nav-item.active .nav-icon {
+  color: #dc2626;
 }
 
 .nav-item.active .nav-label {

@@ -369,25 +369,29 @@ function navigateTo(page: AppPage) {
 .nav-item {
   align-items: center;
   justify-content: center;
-  padding: 6 2 4 2;
+  padding: 8 2 6 2;
 }
 
 .nav-stack {
   horizontal-align: center;
+  vertical-align: center;
+  height: 60;
 }
 
 .nav-icon {
-  font-size: 18;
+  font-size: 22;
   text-align: center;
   color: #f0f2f6;
-  margin-bottom: 1;
+  margin-bottom: 4;
+  vertical-align: top;
 }
 
 .nav-label {
-  font-size: 10;
+  font-size: 11;
   font-weight: 700;
   text-align: center;
   color: #f0f2f6;
+  vertical-align: bottom;
 }
 
 .nav-item.active .nav-icon {

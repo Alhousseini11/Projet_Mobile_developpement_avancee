@@ -54,7 +54,6 @@
             <TextField
               v-model="form.email"
               hint="client@example.com"
-              keyboardType="email"
               autocapitalizationType="none"
               class="field-input"
             />

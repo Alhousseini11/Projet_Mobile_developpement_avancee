@@ -93,34 +93,34 @@
 
       <GridLayout row="1" columns="*,*,*,*,*" class="bottom-nav">
         <GridLayout col="0" class="nav-item" @tap="navigateTo('home')">
-          <GridLayout columns="auto,auto" class="nav-content">
-            <Label text="🏠" col="0" class="nav-icon" />
-            <Label text="Accueil" col="1" class="nav-label" />
-          </GridLayout>
+          <StackLayout class="nav-stack">
+            <Label text="🏠" class="nav-icon" />
+            <Label text="Accueil" class="nav-label" />
+          </StackLayout>
         </GridLayout>
         <GridLayout col="1" class="nav-item" @tap="navigateTo('reservations')">
-          <GridLayout columns="auto,auto" class="nav-content">
-            <Label text="📅" col="0" class="nav-icon" />
-            <Label text="Reserver" col="1" class="nav-label" />
-          </GridLayout>
+          <StackLayout class="nav-stack">
+            <Label text="📅" class="nav-icon" />
+            <Label text="Reserver" class="nav-label" />
+          </StackLayout>
         </GridLayout>
         <GridLayout col="2" class="nav-item" @tap="navigateTo('tutorials')">
-          <GridLayout columns="auto,auto" class="nav-content">
-            <Label text="🎥" col="0" class="nav-icon" />
-            <Label text="Tutoriels" col="1" class="nav-label" />
-          </GridLayout>
+          <StackLayout class="nav-stack">
+            <Label text="🎥" class="nav-icon" />
+            <Label text="Tutoriels" class="nav-label" />
+          </StackLayout>
         </GridLayout>
         <GridLayout col="3" class="nav-item active" @tap="navigateTo('vehicles')">
-          <GridLayout columns="auto,auto" class="nav-content">
-            <Label text="🚗" col="0" class="nav-icon" />
-            <Label text="Vehicules" col="1" class="nav-label" />
-          </GridLayout>
+          <StackLayout class="nav-stack">
+            <Label text="🚗" class="nav-icon" />
+            <Label text="Vehicules" class="nav-label" />
+          </StackLayout>
         </GridLayout>
         <GridLayout col="4" class="nav-item" @tap="navigateTo('profile')">
-          <GridLayout columns="auto,auto" class="nav-content">
-            <Label text="👤" col="0" class="nav-icon" />
-            <Label text="Profil" col="1" class="nav-label" />
-          </GridLayout>
+          <StackLayout class="nav-stack">
+            <Label text="👤" class="nav-icon" />
+            <Label text="Profil" class="nav-label" />
+          </StackLayout>
         </GridLayout>
       </GridLayout>
     </GridLayout>
@@ -322,12 +322,12 @@ function goBack() {
 .vehicle-detail { color: #6b7280; font-size: 12; }
 .vehicle-mileage { color: #dc2626; font-size: 14; font-weight: 800; text-align: right; }
 .bottom-nav { background-color: #121826; border-top-width: 1; border-top-color: #1f2733; }
-.nav-item { align-items: center; justify-content: center; padding: 10 0 4 0; }
-.nav-content { horizontal-align: center; vertical-align: center; }
-.nav-icon { font-size: 18; color: #9ca3af; margin-right: 6; }
-.nav-label { font-size: 12; color: #9ca3af; font-weight: 600; }
+.nav-item { align-items: center; justify-content: center; padding: 8 2 6 2; }
+.nav-stack { horizontal-align: center; vertical-align: center; height: 60; }
+.nav-icon { font-size: 22; text-align: center; color: #f0f2f6; margin-bottom: 4; vertical-align: top; }
+.nav-label { font-size: 11; font-weight: 700; text-align: center; color: #f0f2f6; vertical-align: bottom; }
+.nav-item.active .nav-icon { color: #dc2626; }
 .nav-item.active .nav-label { color: #dc2626; font-weight: 700; }
-.nav-item.active .nav-icon { color: #dc2626; font-weight: 700; }
 .sheet-backdrop { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.4); justify-content: flex-end; }
 .sheet { background-color: #1f2733; padding: 20 16 28 16; border-top-left-radius: 16; border-top-right-radius: 16; }
 .sheet-title { color: #fff; font-size: 16; font-weight: 700; text-align: center; margin-bottom: 8; }
