@@ -366,21 +366,7 @@ async function loadVehicles() {
 }
 
 async function refreshSlots() {
-  if (!selectedDate.value) {
-    availableSlots.value = []
-    selectedTime.value = null
-    return
-  }
-
-  const serviceIds = isEditing.value
-    ? (selectedServiceId.value ? [selectedServiceId.value] : [])
-    : (multiServiceMode.value
-      ? (selectedServiceIds.value.length > 0
-        ? [...selectedServiceIds.value]
-        : (selectedServiceId.value ? [selectedServiceId.value] : []))
-      : (selectedServiceId.value ? [selectedServiceId.value] : []))
-
-  if (serviceIds.length === 0) {
+  if (!selectedServiceId.value || !selectedDate.value) {
     availableSlots.value = []
     selectedTime.value = null
     return
@@ -388,31 +374,21 @@ async function refreshSlots() {
 
   const excludeId = props.reservationToEdit?.id
 
-  const fallbackSlotLists = serviceIds.map(serviceId =>
-    ReservationService.getFallbackAvailableSlots(serviceId, selectedDate.value, excludeId)
+  availableSlots.value = ReservationService.getFallbackAvailableSlots(
+    selectedServiceId.value,
+    selectedDate.value,
+    excludeId
   )
-  availableSlots.value = intersectSlots(fallbackSlotLists)
 
-  const slotLists = await Promise.all(
-    serviceIds.map(serviceId =>
-      ReservationService.getAvailableSlots(serviceId, selectedDate.value, excludeId)
-    )
+  availableSlots.value = await ReservationService.getAvailableSlots(
+    selectedServiceId.value,
+    selectedDate.value,
+    excludeId
   )
-  availableSlots.value = intersectSlots(slotLists)
 
   if (!availableSlots.value.includes(selectedTime.value ?? '')) {
     selectedTime.value = null
   }
-}
-
-function intersectSlots(slotLists: string[][]) {
-  if (slotLists.length === 0) {
-    return []
-  }
-
-  return slotLists.reduce<string[]>((commonSlots, currentSlots) => {
-    return commonSlots.filter(slot => currentSlots.includes(slot))
-  }, [...slotLists[0]])
 }
 
 function initializeSelectionFromProps() {
