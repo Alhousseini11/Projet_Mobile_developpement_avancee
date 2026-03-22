@@ -185,6 +185,13 @@ const accountItems: ProfileItem[] = [
 
 const supportItems: ProfileItem[] = [
   {
+    id: 'notifications',
+    label: 'Notifications',
+    description: 'Alertes rendez-vous, rappels et mises a jour du garage.',
+    badge: 'NTF',
+    page: 'notifications'
+  },
+  {
     id: 'invoice',
     label: 'Factures PDF',
     description: 'Retrouver les documents et justificatifs telechargeables.',

@@ -17,6 +17,7 @@ export type AppPage =
   | 'paymentMethods'
   | 'reviews'
   | 'profile'
+  | 'notifications'
   | 'supportFaq'
 
 interface NavigationOptions {
@@ -50,6 +51,7 @@ const pageRegistry: Record<AppPage, () => PageModule | unknown> = {
   paymentMethods: () => require('@/components/PaymentMethods.vue'),
   reviews: () => require('@/components/Reviews.vue'),
   profile: () => require('@/components/Profile.vue'),
+  notifications: () => require('@/components/Notifications.vue'),
   supportFaq: () => require('@/components/SupportFAQ.vue')
 }
 
