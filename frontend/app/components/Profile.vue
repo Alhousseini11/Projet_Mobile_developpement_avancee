@@ -204,7 +204,8 @@ const supportItems: ProfileItem[] = [
     id: 'support',
     label: 'Support et FAQ',
     description: 'Aide, questions frequentes et contact atelier.',
-    badge: 'FAQ'
+    badge: 'FAQ',
+    page: 'supportFaq' as AppPage
   }
 ]
 

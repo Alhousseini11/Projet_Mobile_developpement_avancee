@@ -6,7 +6,7 @@
           <GridLayout rows="48,150" class="hero-card">
             <GridLayout row="0" columns="auto,*,auto" class="hero-topbar">
               <Label text="☰" col="0" class="hero-menu" />
-              <Label text="Garage+" col="1" class="hero-brand" />
+              <Label text="MECANO" col="1" class="hero-brand" />
               <Label text="● ● ●" col="2" class="hero-status" />
             </GridLayout>
 
@@ -14,7 +14,7 @@
               <GridLayout class="hero-shade" />
               <GridLayout class="hero-glow hero-glow-left" />
               <GridLayout class="hero-glow hero-glow-right" />
-              <Label text="GARAGE" class="hero-watermark" />
+              <Label text="Garage" class="hero-watermark" />
               <Label text="🚗" class="hero-car" />
 
               <StackLayout class="hero-copy">

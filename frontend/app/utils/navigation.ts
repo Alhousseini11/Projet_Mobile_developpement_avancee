@@ -17,6 +17,7 @@ export type AppPage =
   | 'paymentMethods'
   | 'reviews'
   | 'profile'
+  | 'supportFaq'
 
 interface NavigationOptions {
   currentPage?: AppPage
@@ -48,7 +49,8 @@ const pageRegistry: Record<AppPage, () => PageModule | unknown> = {
   addVehicle: () => require('@/components/AddVehicle.vue'),
   paymentMethods: () => require('@/components/PaymentMethods.vue'),
   reviews: () => require('@/components/Reviews.vue'),
-  profile: () => require('@/components/Profile.vue')
+  profile: () => require('@/components/Profile.vue'),
+  supportFaq: () => require('@/components/SupportFAQ.vue')
 }
 
 export const navigationState = reactive<{
