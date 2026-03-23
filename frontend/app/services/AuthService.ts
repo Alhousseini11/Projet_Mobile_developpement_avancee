@@ -1,6 +1,7 @@
 import { reactive } from 'nativescript-vue'
 import { DEMO_ACCOUNT } from '@/config/demo'
 import { apiRequest } from '@/utils/api'
+import { resetNotificationsCache } from '@/services/NotificationsService'
 import { clearStoredSession, patchStoredSessionUser, readStoredSession, writeStoredSession } from '@/utils/authStorage'
 import type {
   AuthSession,
@@ -114,6 +115,7 @@ class AuthService {
         applySession(refreshedSession, true)
       } catch (error) {
         if (isInvalidSessionError(error)) {
+          resetNotificationsCache()
           clearStoredSession()
           clearAuthState()
           return
@@ -229,6 +231,7 @@ class AuthService {
   }
 
   logout() {
+    resetNotificationsCache()
     clearAuthState()
     clearStoredSession()
   }

@@ -47,6 +47,12 @@
               <StackLayout col="1" class="notification-copy">
                 <Label :text="item.title" class="notification-title" textWrap="true" />
                 <Label :text="item.message" class="notification-message" textWrap="true" />
+                <Label
+                  v-if="item.dateContext"
+                  :text="formatNotificationDateContext(item.dateContext)"
+                  class="notification-context"
+                  textWrap="true"
+                />
                 <Label :text="formatNotificationTime(item.createdAt)" class="notification-time" />
               </StackLayout>
 
@@ -96,10 +102,10 @@
 import { computed, ref } from 'nativescript-vue'
 import NotificationsService from '@/services/NotificationsService'
 import type { NotificationItem } from '@/types/notification'
-import { formatNotificationTime } from '@/types/notification'
+import { formatNotificationDateContext, formatNotificationTime } from '@/types/notification'
 import { goBack as navigateBack, navigateToPage, type AppPage } from '@/utils/navigation'
 
-const notifications = ref<NotificationItem[]>(NotificationsService.getFallbackNotifications())
+const notifications = ref<NotificationItem[]>(NotificationsService.getCachedNotifications())
 
 const unreadCount = computed(() => notifications.value.filter(item => !item.read).length)
 const unreadLabel = computed(() => {
@@ -243,6 +249,13 @@ function goBack() {
   color: #4b5563;
   font-size: 12;
   margin-top: 3;
+}
+
+.notification-context {
+  color: #1f2733;
+  font-size: 11;
+  font-weight: 700;
+  margin-top: 4;
 }
 
 .notification-time {
