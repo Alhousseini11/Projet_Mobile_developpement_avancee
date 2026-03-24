@@ -4,23 +4,44 @@
     "target": "ES2020",
     "module": "esnext",
     "moduleResolution": "bundler",
-    "lib": ["dom", "ESNext"],
+    "lib": [
+      "dom",
+      "ESNext"
+    ],
     "sourceMap": true,
     "noEmitHelpers": true,
     "importHelpers": true,
     "baseUrl": ".",
     "paths": {
-      "~/*": ["app/*"],
-      "@/*": ["app/*"]
+      "~/*": [
+        "app/*"
+      ],
+      "@/*": [
+        "app/*"
+      ]
     },
-    "typeRoots": ["types", "node_modules/@types", "../node_modules/@types"],
-    "types": ["node"],
+    "typeRoots": [
+      "types",
+      "node_modules/@types",
+      "../node_modules/@types"
+    ],
+    "types": [
+      "node"
+    ],
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "skipLibCheck": true
   },
-  "include": ["app", "types"],
-  "exclude": ["node_modules", "platforms", "app/examples"]
+  "include": [
+    "app",
+    "types"
+  ],
+  "exclude": [
+    "node_modules",
+    "platforms",
+    "app/examples"
+  ],
+  "extends": "expo/tsconfig.base"
 }
