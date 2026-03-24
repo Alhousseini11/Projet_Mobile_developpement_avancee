@@ -95,19 +95,21 @@
           </StackLayout>
 
           <Label text="Choisir la date" class="section-title" />
-          <FlexboxLayout class="chip-wrap" flexWrap="wrap">
-            <GridLayout
-              v-for="dateOption in dateOptions"
-              :key="dateOption.isoDate"
-              rows="auto,auto"
-              class="date-card"
-              :class="{ selected: selectedDate === dateOption.isoDate }"
-              @tap="selectDate(dateOption.isoDate)"
-            >
-              <Label row="0" :text="dateOption.weekday" class="date-weekday" />
-              <Label row="1" :text="dateOption.label" class="date-label" />
-            </GridLayout>
-          </FlexboxLayout>
+          <ScrollView orientation="horizontal" class="date-scroll">
+            <StackLayout orientation="horizontal" class="date-scroll-inner">
+              <GridLayout
+                v-for="dateOption in dateOptions"
+                :key="dateOption.isoDate"
+                rows="auto,auto"
+                class="date-card"
+                :class="{ selected: selectedDate === dateOption.isoDate }"
+                @tap="selectDate(dateOption.isoDate)"
+              >
+                <Label row="0" :text="dateOption.weekday" class="date-weekday" />
+                <Label row="1" :text="dateOption.label" class="date-label" />
+              </GridLayout>
+            </StackLayout>
+          </ScrollView>
 
           <Label text="Choisir l'heure" class="section-title" />
           <FlexboxLayout class="chip-wrap" flexWrap="wrap">
@@ -210,6 +212,7 @@ interface DateOption {
 
 const WEEKDAY_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aou', 'Sep', 'Oct', 'Nov', 'Dec']
+const DATE_OPTIONS_COUNT = 21
 
 function buildDateOptions(days: number): DateOption[] {
   const options: DateOption[] = []
@@ -256,7 +259,7 @@ function formatServiceReviews(service: ReservationServiceOption) {
 }
 
 const dateOptions = ref<DateOption[]>([])
-const initialDate = buildDateOptions(6)[0]?.isoDate ?? ''
+const initialDate = buildDateOptions(DATE_OPTIONS_COUNT)[0]?.isoDate ?? ''
 
 const services = ref<ReservationServiceOption[]>(ReservationService.getFallbackServices())
 const vehicles = ref<Vehicle[]>([])
@@ -440,7 +443,7 @@ function toggleMultiServiceMode() {
 }
 
 function syncDateOptions() {
-  const nextDateOptions = buildDateOptions(6)
+  const nextDateOptions = buildDateOptions(DATE_OPTIONS_COUNT)
   if (selectedDate.value && !nextDateOptions.some(option => option.isoDate === selectedDate.value)) {
     nextDateOptions.unshift(buildDateOption(selectedDate.value))
     nextDateOptions.sort((left, right) => left.isoDate.localeCompare(right.isoDate))
@@ -844,13 +847,20 @@ function goBack() {
   margin-bottom: 16;
 }
 
+.date-scroll {
+  margin-bottom: 16;
+}
+
+.date-scroll-inner {
+  padding-right: 16;
+}
+
 .date-card {
   width: 92;
   background-color: #ffffff;
   border-radius: 12;
   padding: 12 10;
   margin-right: 10;
-  margin-bottom: 10;
   border-width: 1;
   border-color: #e5e7eb;
 }
