@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@nativescript/core": "~9.0.0",
+    "expo": "^55.0.8",
     "nativescript-vue": "^3.0.0"
   },
   "devDependencies": {
@@ -19,6 +20,7 @@
     "@nativescript/types": "~9.0.0",
     "@nativescript/webpack": "~5.0.31",
     "@types/node": "^20.0.0",
+    "@types/react": "~19.2.10",
     "tailwindcss": "^4.0.0",
     "typescript": "~5.4.0"
   }

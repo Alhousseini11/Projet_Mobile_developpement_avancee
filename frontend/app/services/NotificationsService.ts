@@ -1,9 +1,10 @@
 import type { NotificationDateContext, NotificationItem } from '@/types/notification'
+import { getCurrentSessionFallbackKey } from '@/config/demo'
 import { apiRequest } from '@/utils/api'
 
 const NOTIFICATIONS_TIMEOUT_MS = 7000
 
-let localNotifications: NotificationItem[] = []
+const fallbackNotificationsByKey = new Map<string, NotificationItem[]>()
 
 function cloneNotifications(notifications: NotificationItem[]) {
   return notifications.map(item => ({
@@ -110,16 +111,35 @@ function isUnauthorizedError(error: unknown) {
   return error.message.includes('401') || error.message.includes('Authentification requise')
 }
 
-export function resetNotificationsCache() {
-  localNotifications = []
+function getFallbackNotificationStore() {
+  const key = getCurrentSessionFallbackKey()
+  const existing = fallbackNotificationsByKey.get(key)
+  if (existing) {
+    return existing
+  }
+
+  const initialNotifications: NotificationItem[] = []
+  fallbackNotificationsByKey.set(key, initialNotifications)
+  return initialNotifications
+}
+
+export function resetNotificationsCache(key?: string) {
+  if (key) {
+    fallbackNotificationsByKey.delete(key)
+    return
+  }
+
+  fallbackNotificationsByKey.clear()
 }
 
 class NotificationsService {
   getCachedNotifications() {
-    return cloneNotifications(localNotifications)
+    return cloneNotifications(getFallbackNotificationStore())
   }
 
   async getNotifications() {
+    const key = getCurrentSessionFallbackKey()
+
     try {
       const payload = await apiRequest<unknown>('/notifications', {
         timeoutMs: NOTIFICATIONS_TIMEOUT_MS
@@ -132,11 +152,11 @@ class NotificationsService {
         return this.getCachedNotifications()
       }
 
-      localNotifications = sortNotifications(normalized)
+      fallbackNotificationsByKey.set(key, sortNotifications(normalized))
       return this.getCachedNotifications()
     } catch (error) {
       if (isUnauthorizedError(error)) {
-        resetNotificationsCache()
+        resetNotificationsCache(key)
         return []
       }
 
@@ -157,7 +177,10 @@ class NotificationsService {
       }
     })
 
-    localNotifications = cloneNotifications(next)
+    fallbackNotificationsByKey.set(
+      getCurrentSessionFallbackKey(),
+      cloneNotifications(next)
+    )
     return next
   }
 
@@ -167,7 +190,10 @@ class NotificationsService {
       read: true
     }))
 
-    localNotifications = cloneNotifications(next)
+    fallbackNotificationsByKey.set(
+      getCurrentSessionFallbackKey(),
+      cloneNotifications(next)
+    )
     return next
   }
 }
