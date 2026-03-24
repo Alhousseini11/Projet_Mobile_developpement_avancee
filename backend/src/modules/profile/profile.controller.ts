@@ -1034,3 +1034,22 @@ export async function syncPaymentMethod(req: Request, res: Response) {
     });
   }
 }
+
+export const __profileControllerInternals = {
+  normalizeOptionalText,
+  normalizeOptionalDate,
+  normalizeOptionalInteger,
+  cloneInvoice,
+  buildPaymentMessage,
+  normalizePaymentStatus,
+  serializePaymentMethod,
+  getInvoiceSummaries,
+  findInvoiceById,
+  escapePdfText,
+  formatPdfAmount,
+  buildPdfDocument,
+  buildInvoicePdf,
+  mapMembershipLabel,
+  buildReservationInvoiceAmounts,
+  buildInvoiceNumber
+};

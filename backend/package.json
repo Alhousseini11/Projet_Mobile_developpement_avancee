@@ -8,6 +8,8 @@
     "build": "tsc -p .",
     "test:build": "tsc -p tsconfig.test.json",
     "test": "npm run test:build && node --test dist-test/tests/*.test.js",
+    "test:coverage": "npm run test:build && node --experimental-test-coverage --test-coverage-include=dist-test/src/**/*.js --test-coverage-exclude=dist-test/src/**/*.routes.js --test-coverage-exclude=dist-test/src/modules/chat/**/*.js --test-coverage-exclude=dist-test/src/modules/emergency/**/*.js --test-coverage-exclude=dist-test/src/modules/estimation/**/*.js --test-coverage-exclude=dist-test/src/modules/location/**/*.js --test-coverage-exclude=dist-test/src/config/env.js --test-coverage-exclude=dist-test/src/data/stripe/stripeClient.js --test dist-test/tests/*.test.js",
+    "test:coverage:ci": "npm run test:build && node --experimental-test-coverage --test-coverage-include=dist-test/src/**/*.js --test-coverage-exclude=dist-test/src/**/*.routes.js --test-coverage-exclude=dist-test/src/modules/chat/**/*.js --test-coverage-exclude=dist-test/src/modules/emergency/**/*.js --test-coverage-exclude=dist-test/src/modules/estimation/**/*.js --test-coverage-exclude=dist-test/src/modules/location/**/*.js --test-coverage-exclude=dist-test/src/config/env.js --test-coverage-exclude=dist-test/src/data/stripe/stripeClient.js --test-coverage-lines=80 --test-coverage-functions=90 --test-coverage-branches=75 --test dist-test/tests/*.test.js",
     "start": "node dist/server.js",
     "lint": "eslint .",
     "prisma:migrate": "prisma migrate dev",

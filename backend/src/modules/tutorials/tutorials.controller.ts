@@ -444,3 +444,15 @@ export async function rateTutorial(req: Request, res: Response) {
     res.status(503).json({ message: 'Tutorial rating is not available on this deployment.' });
   }
 }
+
+export const __tutorialControllerInternals = {
+  normalizeDate,
+  ensureStringArray,
+  normalizeCategory,
+  normalizeDifficulty,
+  normalizeDuration,
+  normalizeDurationFromSeconds,
+  cloneTutorial,
+  mapCurrentTutorial,
+  mapLegacyTutorial
+};
