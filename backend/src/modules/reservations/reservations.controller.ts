@@ -690,3 +690,14 @@ export const updateReservation = async (req: Request, res: Response) => {
 
 export const uploadReservationPhoto = createPlaceholderHandler('reservations', 'uploadPhoto');
 export const payReservation = createPlaceholderHandler('reservations', 'pay');
+
+export const __reservationsControllerInternals = {
+  toIsoDate,
+  toTimeLabel,
+  toPrismaStatus,
+  fromPrismaStatus,
+  buildScheduledAt,
+  formatReservationVehicleLabel,
+  toReservationQueryRecord,
+  serializeReservation
+};

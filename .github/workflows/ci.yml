@@ -12,6 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CI_DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_db?schema=public
+      DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_db?schema=public
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ci_db
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d ci_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     defaults:
       run:
         working-directory: backend
@@ -30,13 +45,9 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
-        env:
-          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
         run: npx prisma generate
 
       - name: Validate Prisma schema
-        env:
-          DATABASE_URL: ${{ env.CI_DATABASE_URL }}
         run: npm run prisma:validate
 
       - name: Build backend
@@ -67,3 +78,49 @@ jobs:
 
       - name: Type-check frontend
         run: npm run type-check
+
+  backend-coverage:
+    name: Backend Coverage
+    runs-on: ubuntu-latest
+    env:
+      CI_DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_db?schema=public
+      DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_db?schema=public
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ci_db
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d ci_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Validate Prisma schema
+        run: npm run prisma:validate
+
+      - name: Run backend coverage
+        run: npm run test:coverage:ci

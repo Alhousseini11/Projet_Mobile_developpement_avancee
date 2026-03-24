@@ -593,3 +593,14 @@ export async function getVehicleInsurance(req: Request, res: Response) {
     res.status(404).json({ message: 'Insurance not found' });
   }
 }
+
+export const __vehicleControllerInternals = {
+  normalizeText,
+  normalizeRequiredText,
+  normalizeNumber,
+  normalizeDate,
+  mapCurrentVehicle,
+  mapLegacyVehicle,
+  normalizeVehicleType,
+  buildVehicleWritePayload
+};

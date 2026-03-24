@@ -273,3 +273,11 @@ export async function getHomeFeed(req: Request, res: Response) {
     res.json(buildDefaultFeed(displayName));
   }
 }
+
+export const __homeControllerInternals = {
+  getFirstName,
+  capitalizeWords,
+  formatAppointmentDate,
+  buildDefaultFeed,
+  buildReminderMessage
+};
