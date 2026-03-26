@@ -351,7 +351,6 @@ export async function requestPasswordReset(emailInput: string): Promise<ForgotPa
     await sendPasswordResetEmail({
       toEmail: user.email,
       fullName: user.fullName,
-      resetToken,
       resetCode,
       expiresAt
     });

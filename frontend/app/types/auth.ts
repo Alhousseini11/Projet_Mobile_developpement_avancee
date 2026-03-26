@@ -29,7 +29,6 @@ export interface RegisterCredentials {
 
 export interface ForgotPasswordResponse {
   message: string
-  resetToken?: string
   resetCode?: string
   expiresAt?: string
 }

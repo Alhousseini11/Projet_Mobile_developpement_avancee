@@ -158,7 +158,6 @@ const demoCredentials = AuthService.getDemoCredentials()
 
 const email = ref(demoCredentials.email)
 const resetCode = ref('')
-const resetToken = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const rememberMe = ref(true)
@@ -188,7 +187,6 @@ async function requestResetToken() {
     hasRequestedEmail.value = true
     successMessage.value = response.message
     resetCode.value = response.resetCode ?? ''
-    resetToken.value = response.resetToken ?? ''
     expiresAt.value = response.expiresAt ?? ''
   } catch (error) {
     hasRequestedEmail.value = false
@@ -203,7 +201,7 @@ async function submitReset() {
     return
   }
 
-  if (!resetCode.value.trim() && !resetToken.value.trim()) {
+  if (!resetCode.value.trim()) {
     errorMessage.value = 'Le code de reinitialisation est requis.'
     return
   }
@@ -218,7 +216,6 @@ async function submitReset() {
 
   try {
     await AuthService.resetPassword({
-      token: resetToken.value || undefined,
       email: email.value,
       code: resetCode.value || undefined,
       newPassword: newPassword.value,
