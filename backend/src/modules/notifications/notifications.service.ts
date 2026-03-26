@@ -2,7 +2,7 @@ import { ReservationStatus } from '@prisma/client';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { AppError } from '../../shared/errors';
-import { getReservationServiceLabel } from '../reservations/reservationCatalog';
+import { getReservationServiceLabelMap } from '../reservations/reservationServices.store';
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'alert';
 export type NotificationDateContextKind = 'appointment' | 'reminder' | 'update';
@@ -188,11 +188,16 @@ export async function listNotificationsForUser(userId: string) {
       }
     })
   ]);
+  const serviceLabelMap = await getReservationServiceLabelMap(
+    [nextReservation?.serviceType, latestReservation?.serviceType].filter(
+      (value): value is string => Boolean(value)
+    )
+  );
 
   const items: SerializedNotification[] = [];
 
   if (nextReservation) {
-    const serviceLabel = getReservationServiceLabel(nextReservation.serviceType);
+    const serviceLabel = serviceLabelMap.get(nextReservation.serviceType) ?? nextReservation.serviceType;
     const notification = createNotification({
       id: `reservation-next-${nextReservation.id}`,
       title: 'Prochain rendez-vous',
@@ -231,7 +236,8 @@ export async function listNotificationsForUser(userId: string) {
   }
 
   if (latestReservation) {
-    const serviceLabel = getReservationServiceLabel(latestReservation.serviceType);
+    const serviceLabel =
+      serviceLabelMap.get(latestReservation.serviceType) ?? latestReservation.serviceType;
     const isCancelled = latestReservation.status === ReservationStatus.CANCELLED;
     const notification = createNotification({
       id: `reservation-latest-${latestReservation.id}`,

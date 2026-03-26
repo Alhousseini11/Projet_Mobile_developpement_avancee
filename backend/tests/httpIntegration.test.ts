@@ -190,6 +190,7 @@ async function formRequest(
 }
 async function registerUser() {
   const email = `integration-${randomBytes(4).toString('hex')}@example.com`;
+  const password = 'Garage123!';
   const { response, payload } = await apiRequest<{
     accessToken: string;
     refreshToken: string;
@@ -200,7 +201,7 @@ async function registerUser() {
       fullName: 'Integration User',
       email,
       phone: '+1 514 555 9999',
-      password: 'Garage123!'
+      password
     }
   });
 
@@ -211,8 +212,43 @@ async function registerUser() {
 
   return {
     email,
+    password,
     accessToken: payload!.accessToken,
     refreshToken: payload!.refreshToken
+  };
+}
+
+async function createAdminSession() {
+  const session = await registerUser();
+
+  await prismaClient.user.update({
+    where: {
+      email: session.email
+    },
+    data: {
+      role: 'ADMIN'
+    }
+  });
+
+  const loginResult = await apiRequest<{
+    accessToken: string;
+    refreshToken: string;
+    user: { email: string; role: string };
+  }>('/api/auth/login', {
+    method: 'POST',
+    body: {
+      email: session.email,
+      password: session.password
+    }
+  });
+
+  assert.equal(loginResult.response.status, 200);
+  assert.equal(loginResult.payload?.user.role, 'ADMIN');
+
+  return {
+    ...session,
+    accessToken: loginResult.payload!.accessToken,
+    refreshToken: loginResult.payload!.refreshToken
   };
 }
 
@@ -577,6 +613,112 @@ runIntegrationTest('auth endpoints reject invalid credentials and duplicate acco
   });
   assert.equal(invalidResetPasswordResult.response.status, 401);
   assert.match(invalidResetPasswordResult.payload?.message ?? '', /jeton/i);
+});
+
+runIntegrationTest('admin web and admin APIs are protected and allow service management', async () => {
+  const standardUserSession = await registerUser();
+  const forbiddenSummaryResult = await apiRequest<{ message: string }>('/api/admin/summary', {
+    token: standardUserSession.accessToken
+  });
+  assert.equal(forbiddenSummaryResult.response.status, 403);
+  assert.match(forbiddenSummaryResult.payload?.message ?? '', /Acces refuse/i);
+
+  const adminSession = await createAdminSession();
+
+  const summaryResult = await apiRequest<{
+    metrics: { totalUsers: number; totalReservations: number; activeServices: number };
+    recentReservations: unknown[];
+  }>('/api/admin/summary', {
+    token: adminSession.accessToken
+  });
+  assert.equal(summaryResult.response.status, 200);
+  assert.ok((summaryResult.payload?.metrics.totalUsers ?? 0) >= 2);
+  assert.ok((summaryResult.payload?.metrics.activeServices ?? 0) >= 4);
+  assert.ok(Array.isArray(summaryResult.payload?.recentReservations));
+
+  const usersResult = await apiRequest<Array<{ email: string; role: string }>>('/api/admin/users', {
+    token: adminSession.accessToken
+  });
+  assert.equal(usersResult.response.status, 200);
+  assert.ok(usersResult.payload?.some(user => user.email === adminSession.email && user.role === 'ADMIN'));
+
+  const initialServicesResult = await apiRequest<Array<{ id: string; label: string }>>('/api/admin/services', {
+    token: adminSession.accessToken
+  });
+  assert.equal(initialServicesResult.response.status, 200);
+  assert.ok(initialServicesResult.payload?.some(service => service.id === 'oil-change'));
+
+  const createdServiceResult = await apiRequest<{
+    id: string;
+    label: string;
+    slotTimes: string[];
+    price: number;
+  }>('/api/admin/services', {
+    method: 'POST',
+    token: adminSession.accessToken,
+    body: {
+      label: 'Entretien climatisation',
+      description: 'Nettoyage et verification du circuit de climatisation',
+      durationMinutes: 50,
+      price: 119.99,
+      slotTimes: ['09:15', '14:45']
+    }
+  });
+  assert.equal(createdServiceResult.response.status, 201);
+  assert.equal(createdServiceResult.payload?.id, 'entretien-climatisation');
+  assert.deepEqual(createdServiceResult.payload?.slotTimes, ['09:15', '14:45']);
+
+  const duplicateServiceResult = await apiRequest<{ message: string }>('/api/admin/services', {
+    method: 'POST',
+    token: adminSession.accessToken,
+    body: {
+      label: 'Entretien climatisation',
+      description: 'Doublon volontaire',
+      durationMinutes: 40,
+      price: 99.99,
+      slotTimes: ['10:00', '15:00']
+    }
+  });
+  assert.equal(duplicateServiceResult.response.status, 409);
+  assert.match(duplicateServiceResult.payload?.message ?? '', /existe deja/i);
+
+  const invalidServiceResult = await apiRequest<{ message: string }>('/api/admin/services', {
+    method: 'POST',
+    token: adminSession.accessToken,
+    body: {
+      label: 'A',
+      durationMinutes: 0,
+      price: 0,
+      slotTimes: []
+    }
+  });
+  assert.equal(invalidServiceResult.response.status, 400);
+  assert.match(invalidServiceResult.payload?.message ?? '', /libelle|duree|prix|horaire/i);
+
+  const reservationServicesResult = await apiRequest<Array<{ id: string; label: string }>>(
+    '/api/reservations/services'
+  );
+  assert.equal(reservationServicesResult.response.status, 200);
+  assert.ok(
+    reservationServicesResult.payload?.some(
+      service => service.id === 'entretien-climatisation' && service.label === 'Entretien climatisation'
+    )
+  );
+
+  const slotsResult = await apiRequest<string[]>(
+    '/api/reservations/slots?serviceId=entretien-climatisation&date=2026-05-01'
+  );
+  assert.equal(slotsResult.response.status, 200);
+  assert.deepEqual(slotsResult.payload, ['09:15', '14:45']);
+
+  const reservationsResult = await apiRequest<Array<{ id: string; serviceId: string; serviceLabel: string }>>(
+    '/api/admin/reservations',
+    {
+      token: adminSession.accessToken
+    }
+  );
+  assert.equal(reservationsResult.response.status, 200);
+  assert.ok(Array.isArray(reservationsResult.payload));
 });
 
 runIntegrationTest('public profile and billing endpoints expose demo account data', async () => {

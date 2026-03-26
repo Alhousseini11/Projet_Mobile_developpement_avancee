@@ -183,6 +183,19 @@ model VehicleInsurance {
   updatedAt   DateTime @updatedAt
 }
 
+model ReservationService {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  label           String
+  description     String?
+  durationMinutes Int
+  price           Decimal  @db.Decimal(10, 2)
+  slotTimes       String[]  @default([])
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model Reservation {
   id          String             @id @default(cuid())
   userId      String
