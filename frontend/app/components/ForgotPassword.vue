@@ -12,7 +12,7 @@
           <Label text="Recuperation d'acces" class="hero-kicker" />
           <Label text="Mot de passe oublie" class="hero-title" textWrap="true" />
           <Label
-            text="Demandez un jeton de reinitialisation puis definissez un nouveau mot de passe."
+            text="Demandez un code par email puis saisissez-le pour definir un nouveau mot de passe."
             class="hero-subtitle"
             textWrap="true"
           />
@@ -23,7 +23,7 @@
         <StackLayout class="content">
           <StackLayout class="card">
             <Label text="Etape 1" class="step-label" />
-            <Label text="Recevoir le jeton" class="card-title" />
+            <Label text="Recevoir le code" class="card-title" />
 
             <StackLayout v-if="errorMessage" class="error-banner">
               <Label :text="errorMessage" class="error-copy" textWrap="true" />
@@ -53,18 +53,24 @@
                 width="22"
                 height="22"
               />
-              <Label v-else text="Generer le lien de reinitialisation" class="secondary-cta-text" />
+              <Label v-else text="Envoyer le code de reinitialisation" class="secondary-cta-text" />
             </GridLayout>
 
-            <StackLayout v-if="token" class="reset-section">
+            <StackLayout v-if="hasRequestedEmail" class="reset-section">
               <Label text="Etape 2" class="step-label" />
-              <Label text="Definir le nouveau mot de passe" class="section-title" />
+              <Label text="Utiliser le code recu" class="section-title" />
+              <Label
+                text="Consultez votre boite email, recopiez le code de reinitialisation, puis definissez votre nouveau mot de passe."
+                class="token-helper"
+                textWrap="true"
+              />
 
               <StackLayout class="field-block">
-                <Label text="Jeton de reinitialisation" class="field-label" />
+                <Label text="Code de reinitialisation" class="field-label" />
                 <TextField
-                  v-model="token"
-                  hint="Jeton recu"
+                  v-model="resetCode"
+                  hint="Code a 6 chiffres"
+                  keyboardType="number"
                   autocorrect="false"
                   autocapitalizationType="none"
                   class="field-input"
@@ -151,7 +157,8 @@ import { goBack as navigateBack, navigateToPage } from '@/utils/navigation'
 const demoCredentials = AuthService.getDemoCredentials()
 
 const email = ref(demoCredentials.email)
-const token = ref('')
+const resetCode = ref('')
+const resetToken = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const rememberMe = ref(true)
@@ -161,6 +168,7 @@ const isResetting = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const expiresAt = ref('')
+const hasRequestedEmail = ref(false)
 
 const expiresAtLabel = computed(() => {
   return expiresAt.value ? new Date(expiresAt.value).toLocaleString() : ''
@@ -177,10 +185,13 @@ async function requestResetToken() {
 
   try {
     const response = await AuthService.requestPasswordReset(email.value)
+    hasRequestedEmail.value = true
     successMessage.value = response.message
-    token.value = response.resetToken ?? token.value
+    resetCode.value = response.resetCode ?? ''
+    resetToken.value = response.resetToken ?? ''
     expiresAt.value = response.expiresAt ?? ''
   } catch (error) {
+    hasRequestedEmail.value = false
     errorMessage.value = getErrorMessage(error)
   } finally {
     isRequesting.value = false
@@ -192,8 +203,8 @@ async function submitReset() {
     return
   }
 
-  if (!token.value.trim()) {
-    errorMessage.value = 'Le jeton de reinitialisation est requis.'
+  if (!resetCode.value.trim() && !resetToken.value.trim()) {
+    errorMessage.value = 'Le code de reinitialisation est requis.'
     return
   }
 
@@ -207,7 +218,9 @@ async function submitReset() {
 
   try {
     await AuthService.resetPassword({
-      token: token.value,
+      token: resetToken.value || undefined,
+      email: email.value,
+      code: resetCode.value || undefined,
       newPassword: newPassword.value,
       rememberMe: rememberMe.value
     })
@@ -278,6 +291,9 @@ function getErrorMessage(error: unknown) {
 .field-action { color: #dc2626; font-size: 12; font-weight: 700; }
 .field-input { background-color: #f8fafc; border-width: 1; border-color: #d9e0e8; border-radius: 14; padding: 14 16; font-size: 15; color: #111827; placeholder-color: #94a3b8; }
 .token-meta { color: #64748b; font-size: 12; font-weight: 600; margin-bottom: 10; }
+.email-instructions { background-color: #f8fafc; border-radius: 16; padding: 14 16; margin-bottom: 18; }
+.instruction-copy { color: #475569; font-size: 13; font-weight: 600; margin-bottom: 8; }
+.token-helper { color: #64748b; font-size: 12; font-weight: 600; margin-bottom: 12; }
 .remember-row { margin-top: 2; margin-bottom: 18; }
 .remember-copy { color: #64748b; font-size: 12; font-weight: 600; margin-right: 12; }
 .remember-pill { background-color: #e2e8f0; border-radius: 999; padding: 8 12; min-width: 82; }

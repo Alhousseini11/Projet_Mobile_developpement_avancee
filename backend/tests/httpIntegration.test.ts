@@ -425,6 +425,7 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
   const forgotPasswordResult = await apiRequest<{
     message: string;
     resetToken?: string;
+    resetCode?: string;
   }>('/api/auth/forgot-password', {
     method: 'POST',
     body: {
@@ -435,6 +436,7 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
   assert.equal(forgotPasswordResult.response.status, 200);
   assert.match(forgotPasswordResult.payload?.message ?? '', /reinitialisation/i);
   assert.ok(forgotPasswordResult.payload?.resetToken);
+  assert.ok(forgotPasswordResult.payload?.resetCode);
 
   const resetPageResult = await rawRequest(
     `/reset-password?token=${encodeURIComponent(forgotPasswordResult.payload?.resetToken ?? '')}&email=${encodeURIComponent(session.email)}`
@@ -450,6 +452,34 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
   });
   assert.equal(resetPageSubmitResult.response.status, 200);
   assert.match(resetPageSubmitResult.text, /Mot de passe reinitialise avec succes/i);
+
+  const loginAfterWebResetResult = await apiRequest<{
+    accessToken: string;
+    user: { email: string };
+  }>('/api/auth/login', {
+    method: 'POST',
+    body: {
+      email: session.email,
+      password: 'Garage456!'
+    }
+  });
+
+  assert.equal(loginAfterWebResetResult.response.status, 200);
+  assert.equal(loginAfterWebResetResult.payload?.user.email, session.email);
+
+  const secondForgotPasswordResult = await apiRequest<{
+    message: string;
+    resetToken?: string;
+    resetCode?: string;
+  }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: {
+      email: session.email
+    }
+  });
+
+  assert.equal(secondForgotPasswordResult.response.status, 200);
+  assert.ok(secondForgotPasswordResult.payload?.resetCode);
   const resetPasswordResult = await apiRequest<{
     accessToken: string;
     refreshToken: string;
@@ -458,7 +488,8 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
   }>('/api/auth/reset-password', {
     method: 'POST',
     body: {
-      token: forgotPasswordResult.payload?.resetToken,
+      email: session.email,
+      code: secondForgotPasswordResult.payload?.resetCode,
       newPassword: 'Garage789!'
     }
   });

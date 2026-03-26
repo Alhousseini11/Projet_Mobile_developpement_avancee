@@ -199,7 +199,9 @@ class AuthService {
       apiRequest<AuthSession>('/auth/reset-password', {
         method: 'POST',
         body: {
-          token: payload.token.trim(),
+          token: payload.token?.trim(),
+          email: payload.email?.trim(),
+          code: payload.code?.trim(),
           newPassword: payload.newPassword
         }
       }),

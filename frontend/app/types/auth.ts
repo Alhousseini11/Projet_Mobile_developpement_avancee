@@ -30,11 +30,14 @@ export interface RegisterCredentials {
 export interface ForgotPasswordResponse {
   message: string
   resetToken?: string
+  resetCode?: string
   expiresAt?: string
 }
 
 export interface ResetPasswordPayload {
-  token: string
+  token?: string
+  email?: string
+  code?: string
   newPassword: string
   rememberMe: boolean
 }
