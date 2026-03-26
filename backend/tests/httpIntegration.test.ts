@@ -11,6 +11,12 @@ import dotenv from 'dotenv';
 const backendDir = resolve(__dirname, '..', '..');
 dotenv.config({ path: resolve(backendDir, '.env') });
 
+process.env.SENDGRID_ENABLED = 'false';
+process.env.SENDGRID_API_KEY = '';
+process.env.SENDGRID_FROM_EMAIL = '';
+process.env.SENDGRID_FROM_NAME = '';
+process.env.PASSWORD_RESET_URL = 'http://localhost:3000/reset-password';
+
 const baseDatabaseUrl = process.env.DATABASE_URL ?? '';
 const canRunIntegration = baseDatabaseUrl.trim().length > 0;
 const runIntegrationTest = canRunIntegration ? test : test.skip;
@@ -165,6 +171,23 @@ async function rawRequest(
   return { response, body };
 }
 
+async function formRequest(
+  path: string,
+  body: Record<string, string>
+) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams(body).toString()
+  });
+
+  return {
+    response,
+    text: await response.text()
+  };
+}
 async function registerUser() {
   const email = `integration-${randomBytes(4).toString('hex')}@example.com`;
   const { response, payload } = await apiRequest<{
@@ -413,6 +436,20 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
   assert.match(forgotPasswordResult.payload?.message ?? '', /reinitialisation/i);
   assert.ok(forgotPasswordResult.payload?.resetToken);
 
+  const resetPageResult = await rawRequest(
+    `/reset-password?token=${encodeURIComponent(forgotPasswordResult.payload?.resetToken ?? '')}&email=${encodeURIComponent(session.email)}`
+  );
+  assert.equal(resetPageResult.response.status, 200);
+  assert.match(resetPageResult.response.headers.get('content-type') ?? '', /text\/html/i);
+  assert.match(resetPageResult.body.toString('utf8'), /Reinitialiser votre mot de passe/i);
+
+  const resetPageSubmitResult = await formRequest('/reset-password', {
+    token: forgotPasswordResult.payload?.resetToken ?? '',
+    newPassword: 'Garage456!',
+    confirmPassword: 'Garage456!'
+  });
+  assert.equal(resetPageSubmitResult.response.status, 200);
+  assert.match(resetPageSubmitResult.text, /Mot de passe reinitialise avec succes/i);
   const resetPasswordResult = await apiRequest<{
     accessToken: string;
     refreshToken: string;
@@ -422,7 +459,7 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
     method: 'POST',
     body: {
       token: forgotPasswordResult.payload?.resetToken,
-      newPassword: 'Garage456!'
+      newPassword: 'Garage789!'
     }
   });
 
@@ -437,7 +474,7 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
     method: 'POST',
     body: {
       email: session.email,
-      password: 'Garage456!'
+      password: 'Garage789!'
     }
   });
 
