@@ -188,7 +188,6 @@ async function formRequest(
     text: await response.text()
   };
 }
-
 async function registerUser() {
   const email = `integration-${randomBytes(4).toString('hex')}@example.com`;
   const { response, payload } = await apiRequest<{
@@ -451,7 +450,6 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
   });
   assert.equal(resetPageSubmitResult.response.status, 200);
   assert.match(resetPageSubmitResult.text, /Mot de passe reinitialise avec succes/i);
-
   const resetPasswordResult = await apiRequest<{
     accessToken: string;
     refreshToken: string;
