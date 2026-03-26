@@ -41,12 +41,14 @@ function buildPasswordResetEmailContent(payload: {
   fullName: string;
   resetUrl: string;
   resetToken: string;
+  resetCode: string;
   expiresAt: string;
 }) {
   const firstName = payload.fullName.trim().split(/\s+/)[0] || 'client';
   const safeName = escapeHtml(firstName);
   const safeUrl = escapeHtml(payload.resetUrl);
   const safeToken = escapeHtml(payload.resetToken);
+  const safeCode = escapeHtml(payload.resetCode);
   const safeExpiresAt = escapeHtml(new Date(payload.expiresAt).toLocaleString());
 
   return {
@@ -56,6 +58,7 @@ function buildPasswordResetEmailContent(payload: {
       '',
       'Nous avons recu une demande de reinitialisation de mot de passe pour votre compte Garage Mechanic.',
       '',
+      `Code de reinitialisation: ${payload.resetCode}`,
       `Lien de reinitialisation: ${payload.resetUrl}`,
       `Jeton de reinitialisation: ${payload.resetToken}`,
       `Expiration: ${new Date(payload.expiresAt).toLocaleString()}`,
@@ -67,6 +70,8 @@ function buildPasswordResetEmailContent(payload: {
       '<h2 style="margin:0 0 16px 0;color:#111827;">Reinitialisation du mot de passe</h2>',
       `<p>Bonjour <strong>${safeName}</strong>,</p>`,
       '<p>Nous avons recu une demande de reinitialisation de mot de passe pour votre compte Garage Mechanic.</p>',
+      `<p><strong>Code de reinitialisation :</strong><br /><code style="display:inline-block;padding:14px 18px;background:#111827;border-radius:8px;color:#ffffff;font-size:24px;letter-spacing:0.3em;font-weight:700;">${safeCode}</code></p>`,
+      '<p>Entrez ce code directement dans l’application pour definir votre nouveau mot de passe.</p>',
       `<p><a href="${safeUrl}" style="display:inline-block;background:#dc2626;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">Reinitialiser mon mot de passe</a></p>`,
       `<p><strong>Jeton de reinitialisation :</strong><br /><code style="display:inline-block;padding:10px 12px;background:#f3f4f6;border-radius:6px;color:#111827;">${safeToken}</code></p>`,
       `<p><strong>Expiration :</strong> ${safeExpiresAt}</p>`,
@@ -85,6 +90,7 @@ export async function sendPasswordResetEmail(payload: {
   toEmail: string;
   fullName: string;
   resetToken: string;
+  resetCode: string;
   expiresAt: string;
 }) {
   if (!isPasswordResetEmailEnabled()) {
@@ -109,6 +115,7 @@ export async function sendPasswordResetEmail(payload: {
     fullName: payload.fullName,
     resetUrl,
     resetToken: payload.resetToken,
+    resetCode: payload.resetCode,
     expiresAt: payload.expiresAt
   });
 

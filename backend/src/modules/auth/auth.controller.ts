@@ -152,7 +152,9 @@ export async function forgotPassword(req: Request, res: Response) {
 export async function resetPassword(req: Request, res: Response) {
   try {
     const session = await resetPasswordWithToken({
-      token: String(req.body?.token ?? ''),
+      token: typeof req.body?.token === 'string' ? req.body.token : undefined,
+      email: typeof req.body?.email === 'string' ? req.body.email : undefined,
+      code: typeof req.body?.code === 'string' ? req.body.code : undefined,
       newPassword: String(req.body?.newPassword ?? '')
     });
 

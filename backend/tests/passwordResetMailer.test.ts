@@ -36,13 +36,16 @@ test('password reset mail content includes reset link, token and expiration data
     fullName: 'Alex Martin',
     resetUrl: 'http://localhost:8080/reset-password?token=abc123',
     resetToken: 'abc123',
+    resetCode: '482913',
     expiresAt: '2026-03-26T15:30:00.000Z'
   });
 
   assert.match(content.subject, /Reinitialisation/);
+  assert.match(content.text, /482913/);
   assert.match(content.text, /abc123/);
   assert.match(content.text, /http:\/\/localhost:8080\/reset-password\?token=abc123/);
   assert.match(content.html, /Alex/);
+  assert.match(content.html, /482913/);
   assert.match(content.html, /abc123/);
 });
 
@@ -87,6 +90,7 @@ test('sendPasswordResetEmail returns false when SendGrid delivery is disabled', 
       toEmail: 'client@example.com',
       fullName: 'Client Test',
       resetToken: 'abc123',
+      resetCode: '482913',
       expiresAt: '2026-03-26T15:30:00.000Z'
     });
 
@@ -133,6 +137,7 @@ test('sendPasswordResetEmail sends a formatted email through SendGrid when confi
       toEmail: 'client@example.com',
       fullName: 'Client Test',
       resetToken: 'abc123',
+      resetCode: '482913',
       expiresAt: '2026-03-26T15:30:00.000Z'
     });
 
@@ -143,12 +148,14 @@ test('sendPasswordResetEmail sends a formatted email through SendGrid when confi
     assert.equal(sentPayload.from.name, 'Garage Mechanic');
     assert.equal(sentPayload.replyTo, 'garage@example.com');
     assert.match(sentPayload.subject, /Reinitialisation/);
+    assert.match(sentPayload.text, /482913/);
     assert.match(sentPayload.text, /abc123/);
     assert.match(sentPayload.text, /https:\/\/garage\.example\.com\/reset-password\?token=abc123&email=client%40example\.com/);
     assert.match(
       sentPayload.html,
       /https:\/\/garage\.example\.com\/reset-password\?token=abc123&amp;email=client%40example\.com/
     );
+    assert.match(sentPayload.html, /482913/);
   } finally {
     env.SENDGRID_ENABLED = previousEnv.SENDGRID_ENABLED;
     env.SENDGRID_API_KEY = previousEnv.SENDGRID_API_KEY;
@@ -182,6 +189,7 @@ test('sendPasswordResetEmail rejects invalid reset URL configuration', async () 
           toEmail: 'client@example.com',
           fullName: 'Client Test',
           resetToken: 'abc123',
+          resetCode: '482913',
           expiresAt: '2026-03-26T15:30:00.000Z'
         }),
       error => {
@@ -227,6 +235,7 @@ test('sendPasswordResetEmail surfaces SendGrid delivery failures as AppError', a
           toEmail: 'client@example.com',
           fullName: 'Client Test',
           resetToken: 'abc123',
+          resetCode: '482913',
           expiresAt: '2026-03-26T15:30:00.000Z'
         }),
       error => {

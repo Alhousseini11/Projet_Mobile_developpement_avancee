@@ -47,6 +47,7 @@ export interface AuthSessionPayload {
 export interface ForgotPasswordPayload {
   message: string;
   resetToken?: string;
+  resetCode?: string;
   expiresAt?: string;
 }
 
@@ -66,6 +67,14 @@ function assertPassword(password: string) {
   const value = password.trim();
   if (value.length < 8) {
     throw new AppError('Le mot de passe doit contenir au moins 8 caracteres.', 400);
+  }
+  return value;
+}
+
+function assertResetCode(code: string) {
+  const value = code.trim().replace(/\s+/g, '');
+  if (!/^\d{6}$/.test(value)) {
+    throw new AppError('Le code de reinitialisation doit contenir 6 chiffres.', 400);
   }
   return value;
 }
@@ -150,6 +159,17 @@ function verifyPassword(password: string, passwordHash: string) {
   const stored = Buffer.from(hash, 'hex');
 
   return derived.length === stored.length && crypto.timingSafeEqual(derived, stored);
+}
+
+function generateResetCode() {
+  return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+}
+
+function hashResetCode(userId: string, code: string) {
+  return crypto
+    .createHmac('sha256', env.JWT_SECRET)
+    .update(`${userId}:${code}`)
+    .digest('hex');
 }
 
 function serializeUser(user: AuthenticatedUser) {
@@ -313,12 +333,26 @@ export async function requestPasswordReset(emailInput: string): Promise<ForgotPa
     iat: now,
     exp: now + PASSWORD_RESET_TTL_MS
   });
+  const resetCode = generateResetCode();
+
+  await prisma.passwordResetCode.deleteMany({
+    where: { userId: user.id }
+  });
+
+  await prisma.passwordResetCode.create({
+    data: {
+      userId: user.id,
+      codeHash: hashResetCode(user.id, resetCode),
+      expiresAt: new Date(expiresAt)
+    }
+  });
 
   if (shouldSendEmail) {
     await sendPasswordResetEmail({
       toEmail: user.email,
       fullName: user.fullName,
       resetToken,
+      resetCode,
       expiresAt
     });
   }
@@ -326,15 +360,15 @@ export async function requestPasswordReset(emailInput: string): Promise<ForgotPa
   return {
     message: shouldSendEmail
       ? 'Si un compte existe, un email de reinitialisation a ete envoye.'
-      : 'Lien de reinitialisation genere. Utilisez le jeton recu pour definir un nouveau mot de passe.',
+      : 'Code de reinitialisation genere. Utilisez le code recu pour definir un nouveau mot de passe.',
     resetToken: env.NODE_ENV === 'production' ? undefined : resetToken,
+    resetCode: env.NODE_ENV === 'production' ? undefined : resetCode,
     expiresAt
   };
 }
 
-export async function resetPasswordWithToken(payload: { token: string; newPassword: string }) {
-  const verified = verifySignedToken(payload.token.trim(), 'password-reset');
-  const password = assertPassword(payload.newPassword);
+async function resetPasswordWithTokenValue(token: string) {
+  const verified = verifySignedToken(token.trim(), 'password-reset');
 
   const user = await prisma.user.findUnique({
     where: { id: verified.sub }
@@ -344,11 +378,66 @@ export async function resetPasswordWithToken(payload: { token: string; newPasswo
     throw new AppError('Compte introuvable pour ce jeton.', 404);
   }
 
+  return user;
+}
+
+async function resetPasswordWithCodeValue(emailInput: string, codeInput: string) {
+  const email = assertEmail(emailInput);
+  const code = assertResetCode(codeInput);
+  const user = await prisma.user.findUnique({
+    where: { email }
+  });
+
+  if (!user) {
+    throw new AppError('Code de reinitialisation invalide ou expire.', 401);
+  }
+
+  const passwordResetCode = await prisma.passwordResetCode.findFirst({
+    where: {
+      userId: user.id,
+      codeHash: hashResetCode(user.id, code),
+      expiresAt: {
+        gt: new Date()
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  if (!passwordResetCode) {
+    throw new AppError('Code de reinitialisation invalide ou expire.', 401);
+  }
+
+  return user;
+}
+
+export async function resetPasswordWithToken(payload: {
+  token?: string;
+  email?: string;
+  code?: string;
+  newPassword: string;
+}) {
+  const password = assertPassword(payload.newPassword);
+  let user: User | null = null;
+
+  if (payload.token?.trim()) {
+    user = await resetPasswordWithTokenValue(payload.token);
+  } else if (payload.email?.trim() || payload.code?.trim()) {
+    user = await resetPasswordWithCodeValue(String(payload.email ?? ''), String(payload.code ?? ''));
+  } else {
+    throw new AppError('Jeton ou code de reinitialisation requis.', 400);
+  }
+
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: {
       passwordHash: hashPassword(password)
     }
+  });
+
+  await prisma.passwordResetCode.deleteMany({
+    where: { userId: user.id }
   });
 
   return {
