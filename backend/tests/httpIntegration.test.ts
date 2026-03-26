@@ -615,7 +615,7 @@ runIntegrationTest('auth endpoints reject invalid credentials and duplicate acco
   assert.match(invalidResetPasswordResult.payload?.message ?? '', /jeton/i);
 });
 
-runIntegrationTest('admin web and admin APIs are protected and allow service management', async () => {
+runIntegrationTest('admin web and admin APIs are protected and allow service and tutorial management', async () => {
   const standardUserSession = await registerUser();
   const forbiddenSummaryResult = await apiRequest<{ message: string }>('/api/admin/summary', {
     token: standardUserSession.accessToken
@@ -719,6 +719,36 @@ runIntegrationTest('admin web and admin APIs are protected and allow service man
   );
   assert.equal(reservationsResult.response.status, 200);
   assert.ok(Array.isArray(reservationsResult.payload));
+
+  const createdTutorialResult = await apiRequest<{
+    id: string;
+    title: string;
+    category: string;
+    difficulty: string;
+    videoUrl: string;
+  }>('/api/tutorials', {
+    method: 'POST',
+    token: adminSession.accessToken,
+    body: {
+      title: 'Verifier la batterie',
+      description: 'Tutoriel admin pour la console web',
+      category: 'batterie',
+      difficulty: 'facile',
+      duration: 12,
+      thumbnail: 'https://example.com/battery.png',
+      videoUrl: 'https://example.com/battery.mp4',
+      instructions: ['Couper le moteur', 'Verifier la tension'],
+      tools: ['Multimetre']
+    }
+  });
+  assert.equal(createdTutorialResult.response.status, 201);
+  assert.equal(createdTutorialResult.payload?.title, 'Verifier la batterie');
+
+  const listTutorialsResult = await apiRequest<Array<{ id: string; title: string }>>('/api/tutorials');
+  assert.equal(listTutorialsResult.response.status, 200);
+  assert.ok(
+    listTutorialsResult.payload?.some(item => item.id === createdTutorialResult.payload?.id)
+  );
 });
 
 runIntegrationTest('public profile and billing endpoints expose demo account data', async () => {
@@ -1364,6 +1394,25 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   );
   assert.equal(missingVehicleResult.response.status, 404);
 
+  const adminSession = await createAdminSession();
+
+  const forbiddenTutorialCreateResult = await apiRequest<{ message: string }>('/api/tutorials', {
+    method: 'POST',
+    token: session.accessToken,
+    body: {
+      title: 'Creation interdite',
+      description: 'Un client ne doit pas ajouter de tutoriel',
+      category: 'batterie',
+      difficulty: 'facile',
+      duration: 12,
+      thumbnail: 'https://example.com/battery.png',
+      videoUrl: 'https://example.com/battery.mp4',
+      instructions: ['Instruction'],
+      tools: ['Multimetre']
+    }
+  });
+  assert.equal(forbiddenTutorialCreateResult.response.status, 403);
+
   const createTutorialResult = await apiRequest<{
     id: string;
     title: string;
@@ -1373,6 +1422,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
     rating: number;
   }>('/api/tutorials', {
     method: 'POST',
+    token: adminSession.accessToken,
     body: {
       title: 'Verifier la batterie',
       description: 'Tutoriel de verification de batterie',
@@ -1442,6 +1492,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
     `/api/tutorials/${createTutorialResult.payload?.id}`,
     {
       method: 'PUT',
+      token: adminSession.accessToken,
       body: {
         title: 'Verifier la batterie 12V',
         description: 'Tutoriel mis a jour',
@@ -1463,6 +1514,26 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   const missingTutorialResult = await apiRequest<{ message: string }>('/api/tutorials/missing-id');
   assert.equal(missingTutorialResult.response.status, 404);
 
+  const forbiddenTutorialUpdateResult = await apiRequest<{ message: string }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}`,
+    {
+      method: 'PUT',
+      token: session.accessToken,
+      body: {
+        title: 'Client interdit',
+        description: 'Tentative interdite',
+        category: 'batterie',
+        difficulty: 'facile',
+        duration: 10,
+        thumbnail: 'https://example.com/missing.png',
+        videoUrl: 'https://example.com/missing.mp4',
+        instructions: [],
+        tools: []
+      }
+    }
+  );
+  assert.equal(forbiddenTutorialUpdateResult.response.status, 403);
+
   const missingTutorialViewResult = await apiRequest<null>('/api/tutorials/missing-id/views', {
     method: 'POST'
   });
@@ -1470,6 +1541,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
 
   const invalidTutorialCreateResult = await apiRequest<{ message: string }>('/api/tutorials', {
     method: 'POST',
+    token: adminSession.accessToken,
     body: {
       title: null
     }
@@ -1486,6 +1558,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
 
   const missingTutorialUpdateResult = await apiRequest<{ message: string }>('/api/tutorials/missing-id', {
     method: 'PUT',
+    token: adminSession.accessToken,
     body: {
       title: 'Missing tutorial',
       description: 'Missing tutorial update',
@@ -1546,13 +1619,24 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   const deleteTutorialResult = await apiRequest<null>(
     `/api/tutorials/${createTutorialResult.payload?.id}`,
     {
-      method: 'DELETE'
+      method: 'DELETE',
+      token: adminSession.accessToken
     }
   );
   assert.equal(deleteTutorialResult.response.status, 204);
 
+  const forbiddenTutorialDeleteResult = await apiRequest<{ message: string }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}`,
+    {
+      method: 'DELETE',
+      token: session.accessToken
+    }
+  );
+  assert.equal(forbiddenTutorialDeleteResult.response.status, 403);
+
   const missingTutorialDeleteResult = await apiRequest<{ message: string }>('/api/tutorials/missing-id', {
-    method: 'DELETE'
+    method: 'DELETE',
+    token: adminSession.accessToken
   });
   assert.equal(missingTutorialDeleteResult.response.status, 503);
 });
