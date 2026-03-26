@@ -6,13 +6,15 @@ import { createPlaceholderHandler } from '../_shared/createPlaceholderHandler';
 import { isReservationVehicleLinkAvailable } from '../_shared/schemaCapabilities';
 import { findVehicleById } from '../vehicles/vehicles.controller';
 import {
-  calculateReservationPricing,
-  findReservationService,
+  calculateReservationPricingFromSubtotal,
   getReservationServiceLabel,
-  RESERVATION_SERVICES,
-  SLOT_BY_SERVICE,
   type ReservationServiceOption
 } from './reservationCatalog';
+import {
+  findReservationServiceRecord,
+  getReservationServiceLabelMap,
+  listReservationServiceCatalog
+} from './reservationServices.store';
 
 type ReservationStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
 
@@ -151,11 +153,16 @@ function toReservationQueryRecord(reservation: ReservationSerializableInput) {
   } satisfies ReservationQueryRecord;
 }
 
-function serializeReservation(reservation: ReservationQueryRecord) {
+function serializeReservation(
+  reservation: ReservationQueryRecord,
+  serviceLabelMap?: Map<string, string>
+) {
   return {
     id: reservation.id,
     serviceId: reservation.serviceType,
-    serviceLabel: getReservationServiceLabel(reservation.serviceType),
+    serviceLabel:
+      serviceLabelMap?.get(reservation.serviceType) ??
+      getReservationServiceLabel(reservation.serviceType),
     vehicleId: reservation.vehicleId ?? undefined,
     vehicleLabel: formatReservationVehicleLabel(reservation.vehicle),
     date: toIsoDate(reservation.scheduledAt),
@@ -302,8 +309,11 @@ async function readReservationsForUser(userId: string, email?: string | null) {
 
 export async function listReservationsForUser(userId: string, email?: string | null) {
   const reservations = await readReservationsForUser(userId, email);
+  const serviceLabelMap = await getReservationServiceLabelMap(
+    reservations.map(reservation => reservation.serviceType)
+  );
   return reservations.map(item => {
-    const serialized = serializeReservation(item);
+    const serialized = serializeReservation(item, serviceLabelMap);
     return {
       id: serialized.id,
       userId,
@@ -338,7 +348,10 @@ export async function findReservationForUser(
     return null;
   }
 
-  const serialized = serializeReservation(reservation);
+  const serialized = serializeReservation(
+    reservation,
+    await getReservationServiceLabelMap([reservation.serviceType])
+  );
   return {
     id: serialized.id,
     userId,
@@ -388,13 +401,15 @@ async function getReservedSlots(serviceId: string, date: string, excludeId?: str
 }
 
 async function getAvailableSlots(serviceId: string, date: string, excludeId?: string) {
-  const baseSlots = SLOT_BY_SERVICE[serviceId] ?? ['09:00', '11:00', '14:00', '16:00'];
+  const service = await findReservationServiceRecord(serviceId);
+  const baseSlots = service?.slotTimes ?? ['09:00', '11:00', '14:00', '16:00'];
   const reservedSlots = new Set(await getReservedSlots(serviceId, date, excludeId));
   return baseSlots.filter(slot => !reservedSlots.has(slot));
 }
 
 async function listServicesWithReviewStats() {
   try {
+    const services = await listReservationServiceCatalog();
     const reviews = await prisma.review.findMany({
       select: {
         rating: true,
@@ -416,7 +431,7 @@ async function listServicesWithReviewStats() {
       statsByService.set(serviceId, existing);
     }
 
-    return RESERVATION_SERVICES.map(service => {
+    return services.map(service => {
       const stats = statsByService.get(service.id);
       const reviewCount = stats?.count ?? 0;
       const reviewAverage =
@@ -430,7 +445,7 @@ async function listServicesWithReviewStats() {
     });
   } catch (error) {
     console.error('Error aggregating reservation service reviews:', error);
-    return RESERVATION_SERVICES;
+    return listReservationServiceCatalog();
   }
 }
 
@@ -459,7 +474,10 @@ export const listAvailableSlots = async (req: Request, res: Response) => {
 export const listReservations = async (_req: Request, res: Response) => {
   const { userId, email } = getAuthenticatedUser(res);
   const reservations = await readReservationsForUser(userId, email);
-  res.json(reservations.map(serializeReservation));
+  const serviceLabelMap = await getReservationServiceLabelMap(
+    reservations.map(reservation => reservation.serviceType)
+  );
+  res.json(reservations.map(reservation => serializeReservation(reservation, serviceLabelMap)));
 };
 
 export const createReservation = async (req: Request, res: Response) => {
@@ -482,7 +500,7 @@ export const createReservation = async (req: Request, res: Response) => {
     return;
   }
 
-  const service = findReservationService(serviceId);
+  const service = await findReservationServiceRecord(serviceId);
   if (!service) {
     res.status(404).json({
       message: `Unknown reservation service: ${serviceId}`
@@ -509,7 +527,7 @@ export const createReservation = async (req: Request, res: Response) => {
   }
 
   const scheduledAt = buildScheduledAt(date, time);
-  const pricing = calculateReservationPricing(serviceId);
+  const pricing = calculateReservationPricingFromSubtotal(service.price);
   const canLinkVehicle = await isReservationVehicleLinkAvailable();
 
   const reservation = await prisma.reservation.create({
@@ -554,7 +572,10 @@ export const createReservation = async (req: Request, res: Response) => {
   });
 
   res.status(201).json(
-    serializeReservation(toReservationQueryRecord(reservation))
+    serializeReservation(
+      toReservationQueryRecord(reservation),
+      await getReservationServiceLabelMap([service.id])
+    )
   );
 };
 
@@ -571,6 +592,9 @@ export const getReservationById = async (req: Request, res: Response) => {
 
   res.json({
     ...reservation,
+    serviceLabel:
+      (await getReservationServiceLabelMap([reservation.serviceId])).get(reservation.serviceId) ??
+      reservation.serviceLabel,
     createdAt: reservation.createdAt.toISOString(),
     updatedAt: reservation.updatedAt.toISOString()
   });
@@ -604,7 +628,7 @@ export const updateReservation = async (req: Request, res: Response) => {
       ? req.body.vehicleId.trim() || null
       : existingReservation.vehicleId ?? null;
 
-  const service = findReservationService(nextServiceId);
+  const service = await findReservationServiceRecord(nextServiceId);
   if (!service) {
     res.status(404).json({
       message: `Unknown reservation service: ${nextServiceId}`
@@ -639,7 +663,7 @@ export const updateReservation = async (req: Request, res: Response) => {
 
   const nextStatus =
     typeof req.body?.status === 'string' ? toPrismaStatus(req.body.status) : null;
-  const pricing = calculateReservationPricing(nextServiceId);
+  const pricing = calculateReservationPricingFromSubtotal(service.price);
   const canLinkVehicle = await isReservationVehicleLinkAvailable();
 
   const reservation = await prisma.reservation.update({
@@ -684,7 +708,10 @@ export const updateReservation = async (req: Request, res: Response) => {
   });
 
   res.json(
-    serializeReservation(toReservationQueryRecord(reservation))
+    serializeReservation(
+      toReservationQueryRecord(reservation),
+      await getReservationServiceLabelMap([service.id])
+    )
   );
 };
 

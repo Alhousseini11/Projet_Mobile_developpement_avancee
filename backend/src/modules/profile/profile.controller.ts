@@ -12,7 +12,7 @@ import {
   type AuthenticatedUser
 } from '../auth/auth.service';
 import { getReservationCountForUser } from '../reservations/reservations.controller';
-import { findReservationService, getReservationServiceLabel } from '../reservations/reservationCatalog';
+import { buildReservationServiceMap } from '../reservations/reservationServices.store';
 
 interface ProfilePayload {
   id: string;
@@ -507,12 +507,14 @@ async function getPaymentSummaryForUser(userId?: string | null) {
   return serializePaymentMethod(paymentMethod);
 }
 
-function buildReservationInvoiceAmounts(serviceType: string, amount: Prisma.Decimal) {
+function buildReservationInvoiceAmounts(
+  amount: Prisma.Decimal,
+  servicePrice?: number | null
+) {
   const totalAmount = Number(amount);
-  const service = findReservationService(serviceType);
 
-  if (service) {
-    const subtotalAmount = Number(service.price.toFixed(2));
+  if (typeof servicePrice === 'number') {
+    const subtotalAmount = Number(servicePrice.toFixed(2));
     const taxAmount = Number((totalAmount - subtotalAmount).toFixed(2));
 
     return {
@@ -568,10 +570,14 @@ async function buildInvoicesForUser(user: AuthenticatedUser) {
     settings?.defaultVehicleLabel ??
     detectedVehicleLabel ??
     'Aucun vehicule';
+  const serviceMap = await buildReservationServiceMap(
+    reservations.map(reservation => reservation.serviceType)
+  );
 
   return reservations.map(reservation => {
-    const serviceLabel = getReservationServiceLabel(reservation.serviceType);
-    const pricing = buildReservationInvoiceAmounts(reservation.serviceType, reservation.amount);
+    const service = serviceMap.get(reservation.serviceType);
+    const serviceLabel = service?.label ?? reservation.serviceType;
+    const pricing = buildReservationInvoiceAmounts(reservation.amount, service?.price);
     const issuedAt = reservation.createdAt.toISOString().slice(0, 10);
     const appointmentDate = reservation.scheduledAt.toISOString().slice(0, 10);
     const paymentStatus =
@@ -581,7 +587,6 @@ async function buildInvoicesForUser(user: AuthenticatedUser) {
         : 'pending';
     const paymentLabel =
       paymentStatus === 'paid' ? 'Paiement Stripe' : 'A regler sur place';
-    const service = findReservationService(reservation.serviceType);
     const lineItemLabel = service ? `Forfait ${service.label.toLowerCase()}` : serviceLabel;
 
     return {

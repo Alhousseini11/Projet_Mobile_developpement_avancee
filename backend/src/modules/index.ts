@@ -11,9 +11,11 @@ import locationRoutes from './location/location.routes';
 import estimationRoutes from './estimation/estimation.routes';
 import emergencyRoutes from './emergency/emergency.routes';
 import homeRoutes from './home/home.routes';
+import adminRoutes from './admin/admin.routes';
 
 export function registerRoutes(app: Express) {
   app.use('/api/auth', authRoutes);
+  app.use('/api/admin', adminRoutes);
   app.use('/api/reservations', reservationsRoutes);
   app.use('/api/tutorials', tutorialsRoutes);
   app.use('/api/vehicles', vehiclesRoutes);

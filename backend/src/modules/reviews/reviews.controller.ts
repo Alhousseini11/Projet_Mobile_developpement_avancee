@@ -5,7 +5,7 @@ import {
   findReservationForUser,
   listReservationsForUser
 } from '../reservations/reservations.controller';
-import { getReservationServiceLabel } from '../reservations/reservationCatalog';
+import { getReservationServiceLabelMap } from '../reservations/reservationServices.store';
 
 function getAuthenticatedUser(res: Response) {
   return {
@@ -48,7 +48,8 @@ async function ensureDemoReview(userId: string, email?: string | null) {
   });
 }
 
-function serializeReview(review: {
+function serializeReview(
+  review: {
   id: string;
   reservationId: string;
   rating: number;
@@ -59,11 +60,14 @@ function serializeReview(review: {
     serviceType: string;
     scheduledAt: Date;
   };
-}) {
+},
+  serviceLabelMap: Map<string, string>
+) {
   return {
     id: review.id,
     reservationId: review.reservationId,
-    reservationLabel: getReservationServiceLabel(review.reservation.serviceType),
+    reservationLabel:
+      serviceLabelMap.get(review.reservation.serviceType) ?? review.reservation.serviceType,
     appointmentDate: toAppointmentDate(review.reservation.scheduledAt),
     rating: review.rating,
     comment: review.comment,
@@ -119,7 +123,10 @@ export async function listReviews(_req: Request, res: Response) {
     }
   });
 
-  res.json(reviews.map(serializeReview));
+  const serviceLabelMap = await getReservationServiceLabelMap(
+    reviews.map(review => review.reservation.serviceType)
+  );
+  res.json(reviews.map(review => serializeReview(review, serviceLabelMap)));
 }
 
 export async function upsertReview(req: Request, res: Response) {
@@ -177,7 +184,8 @@ export async function upsertReview(req: Request, res: Response) {
     }
   });
 
+  const serviceLabelMap = await getReservationServiceLabelMap([review.reservation.serviceType]);
   res.status(review.createdAt.getTime() === review.updatedAt.getTime() ? 201 : 200).json(
-    serializeReview(review)
+    serializeReview(review, serviceLabelMap)
   );
 }

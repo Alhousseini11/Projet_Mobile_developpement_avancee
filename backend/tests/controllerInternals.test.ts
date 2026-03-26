@@ -381,8 +381,8 @@ test('profile controller internals normalize profile fields and invoice helpers'
 
   assert.deepEqual(
     __profileControllerInternals.buildReservationInvoiceAmounts(
-      'oil-change',
-      new Prisma.Decimal('90.85')
+      new Prisma.Decimal('90.85'),
+      79
     ),
     {
       subtotalAmount: 79,
@@ -392,8 +392,8 @@ test('profile controller internals normalize profile fields and invoice helpers'
   );
   assert.deepEqual(
     __profileControllerInternals.buildReservationInvoiceAmounts(
-      'custom',
-      new Prisma.Decimal('115.00')
+      new Prisma.Decimal('115.00'),
+      null
     ),
     {
       subtotalAmount: 100,

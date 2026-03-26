@@ -2,11 +2,18 @@ import 'dotenv/config';
 import { Prisma, PrismaClient, ReservationStatus, Role, Severity } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import crypto from 'crypto';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 
 const prisma = new PrismaClient({ adapter });
+
+function hashPassword(password: string) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt$${salt}$${hash}`;
+}
 
 async function main() {
   await prisma.favorite.deleteMany();
@@ -23,6 +30,7 @@ async function main() {
   await prisma.userProfileSettings.deleteMany();
   await prisma.quote.deleteMany();
   await prisma.tutorial.deleteMany();
+  await prisma.reservationService.deleteMany();
   await prisma.vehicle.deleteMany();
   await prisma.location.deleteMany();
   await prisma.user.deleteMany();
@@ -31,7 +39,7 @@ async function main() {
     prisma.user.create({
       data: {
         email: 'alice@example.com',
-        passwordHash: 'hashed-password',
+        passwordHash: hashPassword('Garage123!'),
         fullName: 'Alice Driver',
         role: Role.USER,
         phone: '+15550000001'
@@ -40,7 +48,7 @@ async function main() {
     prisma.user.create({
       data: {
         email: 'bob.mechanic@example.com',
-        passwordHash: 'hashed-password',
+        passwordHash: hashPassword('Mechanic123!'),
         fullName: 'Bob Mechanic',
         role: Role.MECHANIC,
         phone: '+15550000002'
@@ -49,13 +57,58 @@ async function main() {
     prisma.user.create({
       data: {
         email: 'admin@example.com',
-        passwordHash: 'hashed-password',
+        passwordHash: hashPassword('Admin123!'),
         fullName: 'Ada Admin',
         role: Role.ADMIN,
         phone: '+15550000003'
       }
     })
   ]);
+
+  await prisma.reservationService.createMany({
+    data: [
+      {
+        id: 'service-oil-change',
+        slug: 'oil-change',
+        label: 'Vidange',
+        description: 'Entretien regulier avec remplacement huile et filtre.',
+        durationMinutes: 45,
+        price: new Prisma.Decimal('79.00'),
+        slotTimes: ['08:30', '10:00', '13:30', '15:00'],
+        active: true
+      },
+      {
+        id: 'service-brakes',
+        slug: 'brakes',
+        label: 'Freins',
+        description: 'Inspection et entretien des freins.',
+        durationMinutes: 90,
+        price: new Prisma.Decimal('149.00'),
+        slotTimes: ['09:00', '11:30', '14:00', '16:30'],
+        active: true
+      },
+      {
+        id: 'service-battery',
+        slug: 'battery',
+        label: 'Batterie',
+        description: 'Controle ou remplacement de batterie.',
+        durationMinutes: 30,
+        price: new Prisma.Decimal('99.00'),
+        slotTimes: ['08:00', '10:30', '13:00', '17:00'],
+        active: true
+      },
+      {
+        id: 'service-diagnostic',
+        slug: 'diagnostic',
+        label: 'Diagnostic',
+        description: 'Lecture des codes et diagnostic general.',
+        durationMinutes: 60,
+        price: new Prisma.Decimal('59.00'),
+        slotTimes: ['09:30', '12:00', '15:30', '18:00'],
+        active: true
+      }
+    ]
+  });
 
   const location = await prisma.location.create({
     data: {
@@ -249,6 +302,11 @@ async function main() {
           alice: alice.email,
           bob: bob.email,
           admin: admin.email
+        },
+        seededPasswords: {
+          alice: 'Garage123!',
+          mechanic: 'Mechanic123!',
+          admin: 'Admin123!'
         },
         reservationId: reservation.id,
         tutorialId: tutorial.id
