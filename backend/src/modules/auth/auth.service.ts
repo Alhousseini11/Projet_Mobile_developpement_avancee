@@ -5,6 +5,7 @@ import { DEMO_ACCOUNT, isDemoModeEnabled } from '../../config/demo';
 import { env } from '../../config/env';
 import { prisma } from '../../data/prisma/client';
 import { AppError } from '../../shared/errors';
+import { isPasswordResetEmailEnabled, sendPasswordResetEmail } from './passwordResetMailer';
 
 const ACCESS_TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
 const REFRESH_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30;
@@ -289,13 +290,16 @@ export async function requestPasswordReset(emailInput: string): Promise<ForgotPa
   await ensureDemoUserExists();
 
   const email = assertEmail(emailInput);
+  const shouldSendEmail = isPasswordResetEmailEnabled();
   const user = await prisma.user.findUnique({
     where: { email }
   });
 
   if (!user) {
     return {
-      message: 'Si un compte existe, un lien de reinitialisation a ete prepare.'
+      message: shouldSendEmail
+        ? 'Si un compte existe, un email de reinitialisation a ete envoye.'
+        : 'Si un compte existe, un lien de reinitialisation a ete prepare.'
     };
   }
 
@@ -310,8 +314,19 @@ export async function requestPasswordReset(emailInput: string): Promise<ForgotPa
     exp: now + PASSWORD_RESET_TTL_MS
   });
 
+  if (shouldSendEmail) {
+    await sendPasswordResetEmail({
+      toEmail: user.email,
+      fullName: user.fullName,
+      resetToken,
+      expiresAt
+    });
+  }
+
   return {
-    message: 'Lien de reinitialisation genere. Utilisez le jeton recu pour definir un nouveau mot de passe.',
+    message: shouldSendEmail
+      ? 'Si un compte existe, un email de reinitialisation a ete envoye.'
+      : 'Lien de reinitialisation genere. Utilisez le jeton recu pour definir un nouveau mot de passe.',
     resetToken: env.NODE_ENV === 'production' ? undefined : resetToken,
     expiresAt
   };
