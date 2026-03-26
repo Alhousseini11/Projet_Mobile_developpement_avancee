@@ -31,7 +31,7 @@ test('buildPasswordResetUrl preserves existing query parameters', () => {
   assert.equal(url, 'http://localhost:8080/reset-password?source=mobile&token=abc123');
 });
 
-test('password reset mail content includes reset link, token and expiration data', () => {
+test('password reset mail content includes reset link, code, token and expiration data', () => {
   const content = __passwordResetMailerInternals.buildPasswordResetEmailContent({
     fullName: 'Alex Martin',
     resetUrl: 'http://localhost:8080/reset-password?token=abc123',

@@ -71,7 +71,7 @@ function buildPasswordResetEmailContent(payload: {
       `<p>Bonjour <strong>${safeName}</strong>,</p>`,
       '<p>Nous avons recu une demande de reinitialisation de mot de passe pour votre compte Garage Mechanic.</p>',
       `<p><strong>Code de reinitialisation :</strong><br /><code style="display:inline-block;padding:14px 18px;background:#111827;border-radius:8px;color:#ffffff;font-size:24px;letter-spacing:0.3em;font-weight:700;">${safeCode}</code></p>`,
-      '<p>Entrez ce code directement dans l’application pour definir votre nouveau mot de passe.</p>',
+      "<p>Entrez ce code directement dans l'application pour definir votre nouveau mot de passe.</p>",
       `<p><a href="${safeUrl}" style="display:inline-block;background:#dc2626;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;">Reinitialiser mon mot de passe</a></p>`,
       `<p><strong>Jeton de reinitialisation :</strong><br /><code style="display:inline-block;padding:10px 12px;background:#f3f4f6;border-radius:6px;color:#111827;">${safeToken}</code></p>`,
       `<p><strong>Expiration :</strong> ${safeExpiresAt}</p>`,

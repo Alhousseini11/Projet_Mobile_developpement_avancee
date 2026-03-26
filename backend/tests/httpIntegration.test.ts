@@ -480,7 +480,6 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
 
   assert.equal(secondForgotPasswordResult.response.status, 200);
   assert.ok(secondForgotPasswordResult.payload?.resetCode);
-
   const resetPasswordResult = await apiRequest<{
     accessToken: string;
     refreshToken: string;
