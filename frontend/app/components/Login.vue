@@ -7,7 +7,7 @@
         <GridLayout class="hero-grid" />
 
         <StackLayout row="0" class="hero-copy">
-          <Label text="Garage+" class="hero-brand" />
+          <BrandLogo size="hero" class="hero-brand-logo" />
           <Label text="Connexion atelier moderne" class="hero-title" textWrap="true" />
           <Label
             text="Connectez-vous pour gerer vos rendez-vous, vos factures PDF et vos paiements depuis le mobile."
@@ -127,6 +127,7 @@
 
 <script lang="ts" setup>
 import { ref } from 'nativescript-vue'
+import BrandLogo from '@/components/BrandLogo.vue'
 import AuthService, { authState } from '@/services/AuthService'
 import { navigateToPage } from '@/utils/navigation'
 
@@ -240,12 +241,9 @@ function getErrorMessage(error: unknown) {
   margin-top: 22;
   margin-right: 32;
 }
-.hero-brand {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 14;
-  font-weight: 700;
-  letter-spacing: 0.8;
-  text-transform: uppercase;
+.hero-brand-logo {
+  horizontal-align: center;
+  margin-bottom: 14;
 }
 .hero-title {
   color: #ffffff;

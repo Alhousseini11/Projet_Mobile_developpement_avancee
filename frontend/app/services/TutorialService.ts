@@ -21,7 +21,7 @@ const MOCK_TUTORIALS: Tutorial[] = [
     duration: 8,
     views: 15420,
     rating: 4.8,
-    thumbnail: 'res://logo',
+    thumbnail: '~/assets/Logo-centré.png',
     videoUrl: 'https://example.com/videos/brake-pads',
     instructions: [
       'Levez le vehicule avec un cric',
