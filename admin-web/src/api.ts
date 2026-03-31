@@ -34,9 +34,18 @@ function loadSession(): AuthSession | null {
   }
 }
 
-async function parseJson<T>(response: Response) {
+async function parsePayload<T>(response: Response) {
   const text = await response.text();
-  return text ? (JSON.parse(text) as T) : null;
+  if (!text) {
+    return null;
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return JSON.parse(text) as T;
+  }
+
+  return text;
 }
 
 async function refreshSession() {
@@ -59,8 +68,8 @@ async function refreshSession() {
     return false;
   }
 
-  const payload = await parseJson<AuthSession>(response);
-  if (!payload) {
+  const payload = await parsePayload<AuthSession>(response);
+  if (!payload || typeof payload === 'string') {
     saveSession(null);
     return false;
   }
@@ -69,37 +78,63 @@ async function refreshSession() {
   return true;
 }
 
-export async function apiRequest<T>(
-  path: string,
-  options: {
-    method?: string;
-    body?: unknown;
-    retryOnUnauthorized?: boolean;
-  } = {}
-): Promise<T> {
+type RequestOptions = {
+  method?: string;
+  body?: unknown;
+  formData?: FormData;
+  retryOnUnauthorized?: boolean;
+};
+
+async function performRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       ...(options.body ? { 'content-type': 'application/json' } : {}),
       ...(session?.accessToken ? { authorization: `Bearer ${session.accessToken}` } : {})
     },
-    body: options.body ? JSON.stringify(options.body) : undefined
+    body: options.formData ?? (options.body ? JSON.stringify(options.body) : undefined)
   });
 
   if (response.status === 401 && options.retryOnUnauthorized !== false) {
     const refreshed = await refreshSession();
     if (refreshed) {
-      return apiRequest<T>(path, {
+      return performRequest<T>(path, {
         ...options,
         retryOnUnauthorized: false
       });
     }
   }
 
-  const payload = await parseJson<T | ApiErrorPayload>(response);
+  const payload = await parsePayload<T | ApiErrorPayload | string>(response);
   if (!response.ok) {
-    throw new Error((payload as ApiErrorPayload | null)?.message || 'Requete admin invalide.');
+    if (payload && typeof payload === 'object' && 'message' in payload && typeof payload.message === 'string') {
+      throw new Error(payload.message);
+    }
+
+    if (typeof payload === 'string' && payload.trim()) {
+      throw new Error(`Reponse API invalide (${response.status}).`);
+    }
+
+    throw new Error('Requete admin invalide.');
   }
 
   return payload as T;
+}
+
+export async function apiRequest<T>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  return performRequest<T>(path, options);
+}
+
+export async function apiMultipartRequest<T>(
+  path: string,
+  formData: FormData,
+  options: Omit<RequestOptions, 'body' | 'formData'> = {}
+): Promise<T> {
+  return performRequest<T>(path, {
+    ...options,
+    formData
+  });
 }

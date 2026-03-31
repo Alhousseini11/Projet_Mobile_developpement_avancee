@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import cors from 'cors';
 import express from 'express';
 import { requestLogger } from './middleware/requestLogger';
@@ -10,10 +12,13 @@ import {
 
 export function createHttpApp() {
   const app = express();
+  const uploadsDir = path.resolve(process.cwd(), 'uploads');
+  fs.mkdirSync(uploadsDir, { recursive: true });
 
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+  app.use('/uploads', express.static(uploadsDir));
   app.use(requestLogger);
 
   app.get('/', (_req, res) => {

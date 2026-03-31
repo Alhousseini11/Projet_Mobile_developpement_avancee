@@ -1,6 +1,8 @@
 import { DEFAULT_THUMBNAIL, escapeHtml, formatCurrency, formatDate, formatDateTime } from './helpers';
 import type { AdminService, AdminSummary, DashboardData, TutorialItem, ViewKey } from './types';
 
+type ServiceEditorMode = 'create' | 'edit';
+
 export const VIEW_LABELS: Record<ViewKey, string> = {
   dashboard: 'Accueil',
   services: 'Services',
@@ -10,16 +12,25 @@ export const VIEW_LABELS: Record<ViewKey, string> = {
   reviews: 'Avis'
 };
 
+const VIEW_DESCRIPTIONS: Record<ViewKey, string> = {
+  dashboard: 'Vue de synthese du garage avec les chiffres du jour et les actions prioritaires.',
+  services: 'Catalogue des prestations, edition detaillee et archivage des services visibles pour la reservation.',
+  tutorials: 'Bibliotheque video destinee aux clients, avec upload direct des fichiers depuis le poste administrateur.',
+  users: 'Lecture des comptes clients et des roles disponibles sur la plateforme.',
+  reservations: 'Suivi des rendez-vous, des statuts et des montants associes.',
+  reviews: 'Lecture des retours clients recents pour suivre la qualite de service.'
+};
+
 export function renderAppShell(apiUrl: string) {
   return `
     <main class="shell">
       <section class="hero">
-        <div>
+        <div class="hero-copy-block">
           <p class="eyebrow">Garage Mechanic</p>
           <h1>Console administrateur web</h1>
           <p class="hero-copy">
-            Un front web separe pour piloter le garage, suivre les donnees utiles et gerer les services
-            ainsi que les tutoriels video sans passer par l'application mobile.
+            Un espace web separe de l'application mobile pour piloter le garage, structurer le catalogue
+            de services et publier les contenus tutoriels avec une interface claire.
           </p>
         </div>
         <div class="hero-note">
@@ -38,11 +49,11 @@ export function renderAppShell(apiUrl: string) {
         </div>
         <form id="login-form" class="form-grid">
           <label>
-            Email
+            <span>Email</span>
             <input id="login-email" name="email" type="email" autocomplete="email" placeholder="admin@example.com" required />
           </label>
           <label>
-            Mot de passe
+            <span>Mot de passe</span>
             <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Mot de passe" required />
           </label>
           <div class="form-actions">
@@ -71,12 +82,12 @@ function renderQuickList<T>(
 
 function renderMetricCards(summary: AdminSummary) {
   const items: Array<{ label: string; value: number; hint: string; view: ViewKey }> = [
-    { label: 'Utilisateurs', value: summary.metrics.totalUsers, hint: 'Voir les comptes et les roles', view: 'users' },
-    { label: 'Reservations', value: summary.metrics.totalReservations, hint: 'Consulter toutes les reservations', view: 'reservations' },
-    { label: 'A venir', value: summary.metrics.upcomingReservations, hint: 'Acceder aux rendez-vous planifies', view: 'reservations' },
-    { label: 'En attente', value: summary.metrics.pendingReservations, hint: 'Surveiller les demandes a traiter', view: 'reservations' },
-    { label: 'Avis', value: summary.metrics.totalReviews, hint: 'Lire les derniers retours clients', view: 'reviews' },
-    { label: 'Services', value: summary.metrics.activeServices, hint: 'Gerer le catalogue de services', view: 'services' }
+    { label: 'Utilisateurs', value: summary.metrics.totalUsers, hint: 'Consulter les comptes et leurs roles', view: 'users' },
+    { label: 'Reservations', value: summary.metrics.totalReservations, hint: 'Ouvrir le planning atelier', view: 'reservations' },
+    { label: 'A venir', value: summary.metrics.upcomingReservations, hint: 'Suivre les rendez-vous a traiter', view: 'reservations' },
+    { label: 'En attente', value: summary.metrics.pendingReservations, hint: 'Identifier les demandes en attente', view: 'reservations' },
+    { label: 'Avis', value: summary.metrics.totalReviews, hint: 'Lire les retours clients recents', view: 'reviews' },
+    { label: 'Services', value: summary.metrics.activeServices, hint: 'Gerer le catalogue public', view: 'services' }
   ];
 
   return items
@@ -98,8 +109,9 @@ function renderDashboardSection(summary: AdminSummary) {
       <article class="panel">
         <div class="panel-heading">
           <div>
-            <p class="section-kicker">Activite</p>
+            <p class="section-kicker">Priorites</p>
             <h3>Reservations recentes</h3>
+            <p>Les derniers rendez-vous utiles a verifier rapidement.</p>
           </div>
         </div>
         <div class="stack-list">
@@ -120,7 +132,8 @@ function renderDashboardSection(summary: AdminSummary) {
         <div class="panel-heading">
           <div>
             <p class="section-kicker">Qualite</p>
-            <h3>Avis recents</h3>
+            <h3>Derniers avis</h3>
+            <p>Les retours clients les plus recents pour suivre l'experience atelier.</p>
           </div>
         </div>
         <div class="stack-list">
@@ -140,6 +153,10 @@ function renderDashboardSection(summary: AdminSummary) {
   `;
 }
 
+function renderStatusBadge(label: string, variant: 'active' | 'inactive' | 'neutral' = 'neutral') {
+  return `<span class="status-badge ${variant}">${escapeHtml(label)}</span>`;
+}
+
 function renderServiceCards(services: AdminService[], selectedService: AdminService | null) {
   if (services.length === 0) {
     return '<p class="empty-state">Aucun service disponible.</p>';
@@ -153,7 +170,10 @@ function renderServiceCards(services: AdminService[], selectedService: AdminServ
           class="entity-card service-card ${service.id === selectedService?.id ? 'is-active' : ''}"
           data-service-id="${service.id}"
         >
-          <span class="entity-kicker">${escapeHtml(service.slug)}</span>
+          <div class="card-headline">
+            <span class="entity-kicker">${escapeHtml(service.slug)}</span>
+            ${renderStatusBadge(service.active ? 'Actif' : 'Archive', service.active ? 'active' : 'inactive')}
+          </div>
           <strong>${escapeHtml(service.label)}</strong>
           <p>${escapeHtml(service.description || 'Sans description.')}</p>
           <div class="entity-meta">
@@ -166,63 +186,121 @@ function renderServiceCards(services: AdminService[], selectedService: AdminServ
     .join('');
 }
 
-function renderServiceSection(data: DashboardData, selectedServiceId: string | null) {
+function renderServiceSection(
+  data: DashboardData,
+  selectedServiceId: string | null,
+  serviceEditorMode: ServiceEditorMode
+) {
   const selectedService =
-    data.services.find(service => service.id === selectedServiceId) ?? data.services[0] ?? null;
+    serviceEditorMode === 'edit'
+      ? data.services.find(service => service.id === selectedServiceId) ?? data.services[0] ?? null
+      : null;
+
+  const serviceCount = data.services.filter(service => service.active).length;
+  const formTitle = serviceEditorMode === 'edit' ? 'Modifier le service selectionne' : 'Ajouter un nouveau service';
+  const formSubmitLabel = serviceEditorMode === 'edit' ? 'Enregistrer les modifications' : 'Ajouter le service';
 
   return `
-    <section class="content-grid service-layout">
-      <article class="panel">
+    <section class="workspace-layout">
+      <article class="panel workspace-aside">
         <div class="panel-heading">
           <div>
             <p class="section-kicker">Catalogue</p>
             <h3>Services disponibles</h3>
-            <p>Les cartes sont cliquables pour afficher le detail du service.</p>
+            <p>${serviceCount} service(s) actif(s) visibles dans le parcours de reservation.</p>
           </div>
+          <button type="button" class="button-secondary" data-service-new>Nouveau service</button>
         </div>
         <div class="card-grid">
           ${renderServiceCards(data.services, selectedService)}
         </div>
       </article>
 
-      <article class="panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">Detail</p>
-            <h3>${escapeHtml(selectedService?.label || 'Selectionne un service')}</h3>
-          </div>
-        </div>
-        ${
-          selectedService
-            ? `
-              <div class="detail-card">
-                <p class="detail-copy">${escapeHtml(selectedService.description || 'Sans description detaillee.')}</p>
-                <dl class="detail-grid">
-                  <div><dt>Identifiant</dt><dd>${escapeHtml(selectedService.slug)}</dd></div>
-                  <div><dt>Prix</dt><dd>${escapeHtml(formatCurrency(selectedService.price, 'CAD'))}</dd></div>
-                  <div><dt>Duree</dt><dd>${selectedService.durationMinutes} minutes</dd></div>
-                  <div><dt>Horaires</dt><dd>${escapeHtml(selectedService.slotTimes.join(', '))}</dd></div>
-                </dl>
-              </div>
-            `
-            : '<p class="empty-state">Selectionne un service pour voir son detail.</p>'
-        }
-
-        <div class="form-block">
-          <div class="panel-heading compact">
+      <article class="panel workspace-main">
+        <div class="section-stack">
+          <div class="panel-heading">
             <div>
-              <p class="section-kicker">Creation</p>
-              <h3>Ajouter un nouveau service</h3>
+              <p class="section-kicker">Espace de travail</p>
+              <h3>${serviceEditorMode === 'edit' ? escapeHtml(selectedService?.label || 'Service introuvable') : 'Creation d un service'}</h3>
+              <p>
+                ${serviceEditorMode === 'edit'
+                  ? 'Mets a jour le libelle, le tarif, la duree ou les horaires, puis archive le service si besoin.'
+                  : 'Cree un service proprement structure avec son prix, sa duree et ses creneaux de reservation.'}
+              </p>
             </div>
+            ${
+              selectedService
+                ? renderStatusBadge(selectedService.active ? 'Actif' : 'Archive', selectedService.active ? 'active' : 'inactive')
+                : ''
+            }
           </div>
-          <form id="service-form" class="form-grid">
-            <label><span>Libelle</span><input name="label" type="text" placeholder="Entretien climatisation" required /></label>
-            <label><span>Slug optionnel</span><input name="slug" type="text" placeholder="entretien-climatisation" /></label>
-            <label class="field-span-2"><span>Description</span><textarea name="description" placeholder="Description courte du service"></textarea></label>
-            <label><span>Duree (minutes)</span><input name="durationMinutes" type="number" min="1" step="1" placeholder="60" required /></label>
-            <label><span>Prix (CAD)</span><input name="price" type="number" min="0.01" step="0.01" placeholder="89.99" required /></label>
-            <label class="field-span-2"><span>Horaires</span><input name="slotTimes" type="text" placeholder="09:00, 11:00, 14:00, 16:00" required /></label>
-            <div class="form-actions"><button type="submit">Ajouter le service</button></div>
+
+          ${
+            selectedService
+              ? `
+                <div class="detail-card">
+                  <p class="detail-copy">${escapeHtml(selectedService.description || 'Sans description detaillee.')}</p>
+                  <dl class="detail-grid">
+                    <div><dt>Identifiant</dt><dd>${escapeHtml(selectedService.slug)}</dd></div>
+                    <div><dt>Prix</dt><dd>${escapeHtml(formatCurrency(selectedService.price, 'CAD'))}</dd></div>
+                    <div><dt>Duree</dt><dd>${selectedService.durationMinutes} minutes</dd></div>
+                    <div><dt>Horaires</dt><dd>${escapeHtml(selectedService.slotTimes.join(', '))}</dd></div>
+                  </dl>
+                </div>
+              `
+              : `
+                <div class="callout-panel">
+                  <strong>Mode creation</strong>
+                  <p>Renseigne le formulaire ci-dessous pour ajouter un nouveau service au catalogue.</p>
+                </div>
+              `
+          }
+
+          <form id="service-form" class="form-grid" data-service-mode="${serviceEditorMode}">
+            <label>
+              <span>Libelle</span>
+              <input name="label" type="text" placeholder="Entretien climatisation" value="${escapeHtml(selectedService?.label || '')}" required />
+            </label>
+            <label>
+              <span>Slug</span>
+              <input
+                name="slug"
+                type="text"
+                placeholder="entretien-climatisation"
+                value="${escapeHtml(selectedService?.slug || '')}"
+                ${serviceEditorMode === 'edit' ? 'readonly' : ''}
+              />
+            </label>
+            <label class="field-span-2">
+              <span>Description</span>
+              <textarea name="description" placeholder="Description courte du service">${escapeHtml(selectedService?.description || '')}</textarea>
+            </label>
+            <label>
+              <span>Duree (minutes)</span>
+              <input name="durationMinutes" type="number" min="1" step="1" placeholder="60" value="${selectedService?.durationMinutes ?? ''}" required />
+            </label>
+            <label>
+              <span>Prix (CAD)</span>
+              <input name="price" type="number" min="0.01" step="0.01" placeholder="89.99" value="${selectedService?.price ?? ''}" required />
+            </label>
+            <label class="field-span-2">
+              <span>Horaires</span>
+              <input name="slotTimes" type="text" placeholder="09:00, 11:00, 14:00, 16:00" value="${escapeHtml(selectedService?.slotTimes.join(', ') || '')}" required />
+            </label>
+            <div class="form-actions">
+              <button type="submit">${escapeHtml(formTitle)}</button>
+              ${
+                selectedService
+                  ? `
+                    <button type="button" class="button-secondary" data-service-new>Creer un autre service</button>
+                    <button type="button" class="button-danger" data-service-delete="${selectedService.id}">Archiver le service</button>
+                  `
+                  : ''
+              }
+            </div>
+            <p class="form-hint field-span-2">
+              ${escapeHtml(formSubmitLabel)}. L archivage retire le service du parcours de reservation sans perdre son historique.
+            </p>
           </form>
         </div>
       </article>
@@ -243,11 +321,14 @@ function renderTutorialCards(tutorials: TutorialItem[], selectedTutorial: Tutori
           class="entity-card tutorial-card ${tutorial.id === selectedTutorial?.id ? 'is-active' : ''}"
           data-tutorial-id="${tutorial.id}"
         >
-          <span class="entity-kicker">${escapeHtml(tutorial.category)}</span>
+          <div class="card-headline">
+            <span class="entity-kicker">${escapeHtml(tutorial.category)}</span>
+            ${renderStatusBadge(`${tutorial.difficulty} · ${tutorial.duration} min`)}
+          </div>
           <strong>${escapeHtml(tutorial.title)}</strong>
           <p>${escapeHtml(tutorial.description)}</p>
           <div class="entity-meta">
-            <span>${tutorial.duration} min</span>
+            <span>${tutorial.views} vues</span>
             <span>${tutorial.rating.toFixed(1)}/5</span>
           </div>
         </button>
@@ -261,13 +342,13 @@ function renderTutorialsSection(data: DashboardData, selectedTutorialId: string 
     data.tutorials.find(tutorial => tutorial.id === selectedTutorialId) ?? data.tutorials[0] ?? null;
 
   return `
-    <section class="content-grid tutorial-layout">
-      <article class="panel">
+    <section class="workspace-layout">
+      <article class="panel workspace-aside">
         <div class="panel-heading">
           <div>
             <p class="section-kicker">Bibliotheque</p>
             <h3>Tutoriels video</h3>
-            <p>Ajoute et consulte les contenus video visibles dans l'application.</p>
+            <p>${data.tutorials.length} video(s) actuellement publiee(s).</p>
           </div>
         </div>
         <div class="card-grid">
@@ -275,67 +356,76 @@ function renderTutorialsSection(data: DashboardData, selectedTutorialId: string 
         </div>
       </article>
 
-      <article class="panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">Detail</p>
-            <h3>${escapeHtml(selectedTutorial?.title || 'Selectionne un tutoriel')}</h3>
+      <article class="panel workspace-main">
+        <div class="section-stack">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Publication</p>
+              <h3>${escapeHtml(selectedTutorial?.title || 'Ajouter un tutoriel video')}</h3>
+              <p>Le fichier video est televerse directement depuis l ordinateur de l administrateur.</p>
+            </div>
+            ${
+              selectedTutorial
+                ? `<a class="link-chip" href="${escapeHtml(selectedTutorial.videoUrl)}" target="_blank" rel="noreferrer">Ouvrir le media</a>`
+                : ''
+            }
           </div>
+
           ${
             selectedTutorial
-              ? `<a class="link-chip" href="${escapeHtml(selectedTutorial.videoUrl)}" target="_blank" rel="noreferrer">Ouvrir la video</a>`
-              : ''
+              ? `
+                <div class="detail-card">
+                  <div class="media-block">
+                    <video controls preload="metadata" poster="${escapeHtml(selectedTutorial.thumbnail || DEFAULT_THUMBNAIL)}">
+                      <source src="${escapeHtml(selectedTutorial.videoUrl)}" />
+                    </video>
+                  </div>
+                  <p class="detail-copy">${escapeHtml(selectedTutorial.description)}</p>
+                  <dl class="detail-grid">
+                    <div><dt>Categorie</dt><dd>${escapeHtml(selectedTutorial.category)}</dd></div>
+                    <div><dt>Difficulte</dt><dd>${escapeHtml(selectedTutorial.difficulty)}</dd></div>
+                    <div><dt>Duree</dt><dd>${selectedTutorial.duration} minutes</dd></div>
+                    <div><dt>Performance</dt><dd>${selectedTutorial.views} vues · ${selectedTutorial.rating.toFixed(1)}/5</dd></div>
+                  </dl>
+                  <div class="list-block">
+                    <strong>Instructions</strong>
+                    <ul>
+                      ${
+                        selectedTutorial.instructions.length === 0
+                          ? '<li>Aucune instruction.</li>'
+                          : selectedTutorial.instructions.map(item => `<li>${escapeHtml(item)}</li>`).join('')
+                      }
+                    </ul>
+                  </div>
+                  <div class="list-block">
+                    <strong>Outils</strong>
+                    <ul>
+                      ${
+                        selectedTutorial.tools.length === 0
+                          ? '<li>Aucun outil specifie.</li>'
+                          : selectedTutorial.tools.map(item => `<li>${escapeHtml(item)}</li>`).join('')
+                      }
+                    </ul>
+                  </div>
+                </div>
+              `
+              : `
+                <div class="callout-panel">
+                  <strong>Apercu</strong>
+                  <p>Choisis un tutoriel dans la bibliotheque ou publie un nouveau contenu video.</p>
+                </div>
+              `
           }
-        </div>
-        ${
-          selectedTutorial
-            ? `
-              <div class="detail-card">
-                <div class="media-block">
-                  <img src="${escapeHtml(selectedTutorial.thumbnail || DEFAULT_THUMBNAIL)}" alt="${escapeHtml(selectedTutorial.title)}" />
-                </div>
-                <p class="detail-copy">${escapeHtml(selectedTutorial.description)}</p>
-                <dl class="detail-grid">
-                  <div><dt>Categorie</dt><dd>${escapeHtml(selectedTutorial.category)}</dd></div>
-                  <div><dt>Difficulte</dt><dd>${escapeHtml(selectedTutorial.difficulty)}</dd></div>
-                  <div><dt>Duree</dt><dd>${selectedTutorial.duration} minutes</dd></div>
-                  <div><dt>Vues</dt><dd>${selectedTutorial.views}</dd></div>
-                </dl>
-                <div class="list-block">
-                  <strong>Instructions</strong>
-                  <ul>
-                    ${
-                      selectedTutorial.instructions.length === 0
-                        ? '<li>Aucune instruction.</li>'
-                        : selectedTutorial.instructions.map(item => `<li>${escapeHtml(item)}</li>`).join('')
-                    }
-                  </ul>
-                </div>
-                <div class="list-block">
-                  <strong>Outils</strong>
-                  <ul>
-                    ${
-                      selectedTutorial.tools.length === 0
-                        ? '<li>Aucun outil specifie.</li>'
-                        : selectedTutorial.tools.map(item => `<li>${escapeHtml(item)}</li>`).join('')
-                    }
-                  </ul>
-                </div>
-              </div>
-            `
-            : '<p class="empty-state">Selectionne un tutoriel pour voir son detail.</p>'
-        }
 
-        <div class="form-block">
-          <div class="panel-heading compact">
-            <div>
-              <p class="section-kicker">Creation</p>
-              <h3>Ajouter un tutoriel video</h3>
-            </div>
-          </div>
-          <form id="tutorial-form" class="form-grid">
-            <label class="field-span-2"><span>Titre</span><input name="title" type="text" placeholder="Verifier le niveau d'huile" required /></label>
-            <label class="field-span-2"><span>Description</span><textarea name="description" placeholder="Description du tutoriel" required></textarea></label>
+          <form id="tutorial-form" class="form-grid" enctype="multipart/form-data">
+            <label class="field-span-2">
+              <span>Titre</span>
+              <input name="title" type="text" placeholder="Verifier le niveau d huile" required />
+            </label>
+            <label class="field-span-2">
+              <span>Description</span>
+              <textarea name="description" placeholder="Description claire du tutoriel" required></textarea>
+            </label>
             <label>
               <span>Categorie</span>
               <select name="category">
@@ -357,12 +447,37 @@ function renderTutorialsSection(data: DashboardData, selectedTutorialId: string 
                 <option value="difficile">Difficile</option>
               </select>
             </label>
-            <label><span>Duree (minutes)</span><input name="duration" type="number" min="1" step="1" placeholder="12" required /></label>
-            <label><span>URL video</span><input name="videoUrl" type="url" placeholder="https://..." required /></label>
-            <label class="field-span-2"><span>URL miniature</span><input name="thumbnail" type="url" placeholder="https://..." /></label>
-            <label class="field-span-2"><span>Instructions</span><textarea name="instructions" placeholder="Une instruction par ligne" required></textarea></label>
-            <label class="field-span-2"><span>Outils</span><textarea name="tools" placeholder="Liste separee par ligne ou virgule"></textarea></label>
-            <div class="form-actions"><button type="submit">Ajouter le tutoriel</button></div>
+            <label>
+              <span>Duree (minutes)</span>
+              <input name="duration" type="number" min="1" step="1" placeholder="12" required />
+            </label>
+            <label>
+              <span>Miniature optionnelle</span>
+              <input name="thumbnail" type="url" placeholder="https://..." />
+            </label>
+            <label class="field-span-2">
+              <span>Fichier video</span>
+              <input
+                name="videoFile"
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska,.mp4,.webm,.mov,.avi,.mkv"
+                required
+              />
+            </label>
+            <label class="field-span-2">
+              <span>Instructions</span>
+              <textarea name="instructions" placeholder="Une instruction par ligne" required></textarea>
+            </label>
+            <label class="field-span-2">
+              <span>Outils</span>
+              <textarea name="tools" placeholder="Liste separee par ligne ou virgule"></textarea>
+            </label>
+            <div class="form-actions">
+              <button type="submit">Publier le tutoriel</button>
+            </div>
+            <p class="form-hint field-span-2">
+              Formats acceptes : MP4, WebM, MOV, AVI, MKV. Taille maximale cote serveur : 250 Mo.
+            </p>
           </form>
         </div>
       </article>
@@ -378,6 +493,7 @@ function renderUsersSection(data: DashboardData) {
           <div>
             <p class="section-kicker">Clients et equipe</p>
             <h3>Utilisateurs</h3>
+            <p>Lecture seule pour verifier la composition de la base et l'activite par compte.</p>
           </div>
         </div>
         <div class="table-wrap">
@@ -395,7 +511,7 @@ function renderUsersSection(data: DashboardData) {
                           <tr>
                             <td><strong>${escapeHtml(user.fullName)}</strong><p class="muted-text">${escapeHtml(user.email)}</p></td>
                             <td>${escapeHtml(user.role)}</td>
-                            <td>${user.vehicleCount} vehicules - ${user.reservationCount} reservations - ${user.reviewCount} avis</td>
+                            <td>${user.vehicleCount} vehicules · ${user.reservationCount} reservations · ${user.reviewCount} avis</td>
                             <td>${escapeHtml(formatDate(user.createdAt))}</td>
                           </tr>
                         `
@@ -418,6 +534,7 @@ function renderReservationsSection(data: DashboardData) {
           <div>
             <p class="section-kicker">Planning</p>
             <h3>Reservations</h3>
+            <p>Vision chronologique des rendez-vous clients, statuts et montants factures.</p>
           </div>
         </div>
         <div class="table-wrap">
@@ -459,6 +576,7 @@ function renderReviewsSection(summary: AdminSummary) {
           <div>
             <p class="section-kicker">Qualite</p>
             <h3>Derniers avis</h3>
+            <p>Lecture des derniers commentaires pour identifier rapidement les irritants ou les succes.</p>
           </div>
         </div>
         <div class="stack-list">
@@ -478,10 +596,16 @@ function renderReviewsSection(summary: AdminSummary) {
   `;
 }
 
-function renderActiveSection(data: DashboardData, currentView: ViewKey, selectedServiceId: string | null, selectedTutorialId: string | null) {
+function renderActiveSection(
+  data: DashboardData,
+  currentView: ViewKey,
+  selectedServiceId: string | null,
+  selectedTutorialId: string | null,
+  serviceEditorMode: ServiceEditorMode
+) {
   switch (currentView) {
     case 'services':
-      return renderServiceSection(data, selectedServiceId);
+      return renderServiceSection(data, selectedServiceId, serviceEditorMode);
     case 'tutorials':
       return renderTutorialsSection(data, selectedTutorialId);
     case 'users':
@@ -501,16 +625,26 @@ export function renderDashboardPage(args: {
   data: DashboardData;
   selectedServiceId: string | null;
   selectedTutorialId: string | null;
+  serviceEditorMode: ServiceEditorMode;
   sessionName: string;
   sessionEmail: string;
 }) {
-  const { currentView, data, selectedServiceId, selectedTutorialId, sessionName, sessionEmail } = args;
+  const {
+    currentView,
+    data,
+    selectedServiceId,
+    selectedTutorialId,
+    serviceEditorMode,
+    sessionName,
+    sessionEmail
+  } = args;
 
   return `
     <div class="dashboard-toolbar">
       <div>
         <p class="section-kicker">Pilotage</p>
         <h2>${escapeHtml(VIEW_LABELS[currentView])}</h2>
+        <p class="muted-text">${escapeHtml(VIEW_DESCRIPTIONS[currentView])}</p>
         <p id="session-copy" class="muted-text">Connecte en tant que ${escapeHtml(sessionName)} (${escapeHtml(sessionEmail)})</p>
       </div>
       <div class="toolbar-actions">
@@ -545,6 +679,6 @@ export function renderDashboardPage(args: {
         : ''
     }
 
-    ${renderActiveSection(data, currentView, selectedServiceId, selectedTutorialId)}
+    ${renderActiveSection(data, currentView, selectedServiceId, selectedTutorialId, serviceEditorMode)}
   `;
 }
