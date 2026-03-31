@@ -3,10 +3,10 @@
     <GridLayout rows="*,72" class="page-shell">
       <ScrollView row="0">
         <StackLayout class="content">
-          <GridLayout rows="48,150" class="hero-card">
-            <GridLayout row="0" columns="auto,*,auto" class="hero-topbar">
+          <GridLayout rows="68,146" class="hero-card">
+            <GridLayout row="0" columns="56,*,56" class="hero-topbar">
               <Label text="☰" col="0" class="hero-menu" />
-              <Label text="MECANO" col="1" class="hero-brand" />
+              <BrandLogo col="1" size="compact" class="hero-brand-logo" />
               <Label text="● ● ●" col="2" class="hero-status" />
             </GridLayout>
 
@@ -95,6 +95,7 @@
 
 <script lang="ts" setup>
 import { ref } from 'nativescript-vue'
+import BrandLogo from '@/components/BrandLogo.vue'
 import AuthService from '@/services/AuthService'
 import HomeService from '@/services/HomeService'
 import { navigateToPage, type AppPage } from '@/utils/navigation'
@@ -175,31 +176,28 @@ function navigateTo(page: AppPage) {
 }
 
 .hero-topbar {
-  background-color: #e53a33;
-  padding: 0 16;
+  background-color: #ffffff;
+  padding: 8 14;
   vertical-align: center;
 }
 
 .hero-menu {
   font-size: 21;
-  color: #ffffff;
+  color: #e53a33;
   font-weight: 700;
+  horizontal-align: center;
   vertical-align: center;
 }
 
-.hero-brand {
-  color: #ffffff;
-  font-size: 13;
-  font-weight: 700;
-  letter-spacing: 1.1;
+.hero-brand-logo {
   horizontal-align: center;
   vertical-align: center;
 }
 
 .hero-status {
-  color: rgba(255, 255, 255, 0.7);
+  color: #e53a33;
   font-size: 9;
-  horizontal-align: right;
+  horizontal-align: center;
   vertical-align: center;
 }
 
