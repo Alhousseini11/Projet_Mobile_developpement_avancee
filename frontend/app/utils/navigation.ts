@@ -11,6 +11,8 @@ export type AppPage =
   | 'myInformation'
   | 'invoices'
   | 'tutorials'
+  | 'tutorialDetail'
+  | 'tutorialVideo'
   | 'vehicles'
   | 'vehicleDetails'
   | 'addVehicle'
@@ -45,6 +47,8 @@ const pageRegistry: Record<AppPage, () => PageModule | unknown> = {
   myInformation: () => require('@/components/MyInformation.vue'),
   invoices: () => require('@/components/Invoices.vue'),
   tutorials: () => require('@/components/Tutorials.vue'),
+  tutorialDetail: () => require('@/components/TutorialDetail.vue'),
+  tutorialVideo: () => require('@/components/TutorialVideoPlayer.vue'),
   vehicles: () => require('@/components/Vehicles.vue'),
   vehicleDetails: () => require('@/components/VehicleDetails.vue'),
   addVehicle: () => require('@/components/AddVehicle.vue'),
@@ -122,10 +126,14 @@ export function navigateToPage(page: AppPage, options: NavigationOptions = {}) {
   navigationState.stack.push(nextEntry)
 }
 
-export function goBack() {
-  if (navigationState.stack.length <= 1) {
-    return
-  }
+export function goBack(steps: number = 1) {
+  const count = Math.max(1, Math.floor(steps))
 
-  navigationState.stack.pop()
+  for (let index = 0; index < count; index += 1) {
+    if (navigationState.stack.length <= 1) {
+      return
+    }
+
+    navigationState.stack.pop()
+  }
 }
