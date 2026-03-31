@@ -9,7 +9,7 @@ import {
   UpdateTutorialDTO,
   TutorialCategory
 } from '@/types/tutorial'
-import { apiRequest } from '@/utils/api'
+import { API_BASE_URL, apiRequest } from '@/utils/api'
 
 const MOCK_TUTORIALS: Tutorial[] = [
   {
@@ -39,6 +39,7 @@ const MOCK_TUTORIALS: Tutorial[] = [
 ]
 
 const TUTORIAL_READ_TIMEOUT_MS = 10000
+const PUBLIC_BACKEND_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '')
 
 let tutorialsRequest: Promise<Tutorial[]> | null = null
 
@@ -177,9 +178,28 @@ class TutorialService {
     return this.normalize(updated)
   }
 
+  private normalizeMediaUrl(value: string): string {
+    const normalized = typeof value === 'string' ? value.trim() : ''
+
+    if (!normalized) {
+      return normalized
+    }
+
+    if (/^https?:\/\//i.test(normalized)) {
+      return normalized
+    }
+
+    if (normalized.startsWith('/')) {
+      return `${PUBLIC_BACKEND_BASE_URL}${normalized}`
+    }
+
+    return `${PUBLIC_BACKEND_BASE_URL}/${normalized.replace(/^\/+/, '')}`
+  }
+
   private normalize(tutorial: Tutorial): Tutorial {
     return {
       ...tutorial,
+      videoUrl: this.normalizeMediaUrl(tutorial.videoUrl),
       createdAt: new Date(tutorial.createdAt),
       updatedAt: new Date(tutorial.updatedAt)
     }

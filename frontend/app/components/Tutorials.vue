@@ -15,36 +15,50 @@
           </GridLayout>
 
           <StackLayout class="hero-card">
-            <Label text="Bibliotheque atelier" class="hero-title" />
+            <Label text="ATELIER VIDEO" class="hero-kicker" />
+            <Label text="Tutoriels atelier" class="hero-title" />
             <Label
-              text="Retrouvez des guides video par categorie, niveau et duree."
+              text="Des guides plus lisibles, classes par categorie et prets a etre consultes avant une intervention."
               class="hero-subtitle"
               textWrap="true"
             />
+
+            <GridLayout columns="*,*,*" columnSpacing="10" class="hero-stats">
+              <StackLayout col="0" class="hero-stat-card">
+                <Label :text="String(tutorials.length)" class="hero-stat-value" />
+                <Label text="Videos" class="hero-stat-label" />
+              </StackLayout>
+              <StackLayout col="1" class="hero-stat-card">
+                <Label :text="String(categoryCount)" class="hero-stat-value" />
+                <Label text="Categories" class="hero-stat-label" />
+              </StackLayout>
+              <StackLayout col="2" class="hero-stat-card">
+                <Label :text="averageDurationLabel" class="hero-stat-value" />
+                <Label text="Duree moy." class="hero-stat-label" />
+              </StackLayout>
+            </GridLayout>
           </StackLayout>
 
-          <GridLayout columns="*,*" columnSpacing="12" class="summary-grid">
-            <StackLayout col="0" class="summary-card">
-              <Label :text="String(tutorials.length)" class="summary-value" />
-              <Label text="Tutoriels" class="summary-label" />
-            </StackLayout>
+          <StackLayout class="search-panel">
+            <GridLayout columns="*,auto" class="search-header">
+              <StackLayout col="0">
+                <Label text="Rechercher un guide" class="panel-title" />
+                <Label :text="catalogueSubtitle" class="panel-copy" textWrap="true" />
+              </StackLayout>
+              <StackLayout col="1" class="search-summary-pill">
+                <Label :text="resultCountLabel" class="search-summary-text" />
+              </StackLayout>
+            </GridLayout>
 
-            <StackLayout col="1" class="summary-card summary-card-dark">
-              <Label :text="featuredDurationLabel" class="summary-value small light" />
-              <Label text="Duree mise en avant" class="summary-label light" />
-            </StackLayout>
-          </GridLayout>
-
-          <StackLayout class="search-card">
             <TextField
               v-model="searchQuery"
-              hint="Rechercher un tutoriel"
+              hint="Titre, categorie, description"
               class="search-input"
               @textChange="performSearch"
             />
           </StackLayout>
 
-          <ScrollView orientation="horizontal" class="chips">
+          <ScrollView orientation="horizontal" class="chips-scroll">
             <StackLayout orientation="horizontal" class="chips-row">
               <Label
                 v-for="category in ['all', ...categories]"
@@ -56,18 +70,40 @@
             </StackLayout>
           </ScrollView>
 
-          <StackLayout v-if="featuredTutorial" class="featured-card" @tap="watchTutorial(featuredTutorial)">
-            <Label text="Tutoriel recommande" class="featured-kicker" />
-            <Label :text="featuredTutorial.title" class="featured-title" textWrap="true" />
-            <Label :text="featuredTutorial.description" class="featured-description" textWrap="true" />
-            <GridLayout columns="auto,auto,auto" columnSpacing="8" class="featured-meta">
-              <Label col="0" :text="tutorialCategoryLabel(featuredTutorial.category)" class="featured-pill" />
-              <Label col="1" :text="difficultyLabel(featuredTutorial.difficulty)" class="featured-pill" />
-              <Label col="2" :text="formatDuration(featuredTutorial.duration)" class="featured-pill" />
+          <StackLayout v-if="featuredTutorial" class="featured-card" @tap="openTutorial(featuredTutorial)">
+            <GridLayout columns="72,*" class="featured-grid">
+              <StackLayout col="0" class="featured-mark">
+                <Label :text="tutorialBadge(featuredTutorial)" class="featured-mark-text" />
+              </StackLayout>
+
+              <StackLayout col="1" class="featured-copy">
+                <Label text="A la une" class="featured-kicker" />
+                <Label :text="featuredTutorial.title" class="featured-title" textWrap="true" />
+                <Label :text="featuredTutorial.description" class="featured-description" textWrap="true" />
+                <GridLayout columns="auto,auto,auto" columnSpacing="8" class="featured-meta">
+                  <Label col="0" :text="tutorialCategoryLabel(featuredTutorial.category)" class="featured-pill" />
+                  <Label col="1" :text="difficultyLabel(featuredTutorial.difficulty)" class="featured-pill" />
+                  <Label col="2" :text="formatDuration(featuredTutorial.duration)" class="featured-pill" />
+                </GridLayout>
+                <GridLayout columns="*,auto" class="featured-footer">
+                  <Label col="0" :text="featuredSupportLabel(featuredTutorial)" class="featured-support" textWrap="true" />
+                  <StackLayout col="1" class="featured-cta">
+                    <Label text="Voir le detail" class="featured-cta-text" />
+                  </StackLayout>
+                </GridLayout>
+              </StackLayout>
             </GridLayout>
           </StackLayout>
 
-          <Label text="Tous les tutoriels" class="section-title" />
+          <GridLayout columns="*,auto" class="catalogue-header">
+            <StackLayout col="0">
+              <Label text="Catalogue" class="section-title" />
+              <Label text="Touchez une carte pour ouvrir sa fiche detaillee et lancer la lecture." class="section-copy" textWrap="true" />
+            </StackLayout>
+            <StackLayout col="1" class="catalogue-chip">
+              <Label :text="viewCountLabel" class="catalogue-chip-text" />
+            </StackLayout>
+          </GridLayout>
 
           <StackLayout v-if="filteredTutorials.length === 0" class="empty-card">
             <Label text="Aucun tutoriel trouve." class="empty-title" />
@@ -79,32 +115,37 @@
               v-for="tutorial in filteredTutorials"
               :key="tutorial.id"
               rows="auto,auto,auto"
-              columns="64,*,auto"
+              columns="74,*,auto"
               class="tutorial-card"
-              @tap="watchTutorial(tutorial)"
+              @tap="openTutorial(tutorial)"
             >
-              <GridLayout row="0" rowSpan="3" col="0" class="tutorial-badge">
-                <Label :text="tutorialBadge(tutorial)" class="tutorial-badge-text" />
-              </GridLayout>
+              <StackLayout row="0" rowSpan="3" col="0" class="tutorial-cover">
+                <Label :text="tutorialBadge(tutorial)" class="tutorial-cover-badge" />
+                <Label text="guide" class="tutorial-cover-copy" />
+              </StackLayout>
 
               <StackLayout row="0" col="1" class="tutorial-copy">
+                <GridLayout columns="auto,*" class="tutorial-header-row">
+                  <Label col="0" :text="tutorialCategoryLabel(tutorial.category)" class="mini-kicker" />
+                  <Label col="1" :text="ratingLabel(tutorial.rating)" class="rating-copy" />
+                </GridLayout>
                 <Label :text="tutorial.title" class="tutorial-title" textWrap="true" />
                 <Label :text="tutorial.description" class="tutorial-description" textWrap="true" />
               </StackLayout>
 
-              <GridLayout row="0" col="2" class="play-btn">
-                <Label text=">" class="play-btn-text" />
-              </GridLayout>
+              <StackLayout row="0" col="2" class="card-action">
+                <Label text="Voir" class="card-action-text" />
+              </StackLayout>
 
               <GridLayout row="1" col="1" colSpan="2" columns="auto,auto,auto" columnSpacing="8" class="meta-row">
-                <Label col="0" :text="tutorialCategoryLabel(tutorial.category)" class="meta-pill" />
-                <Label col="1" :text="difficultyLabel(tutorial.difficulty)" class="meta-pill" />
-                <Label col="2" :text="formatDuration(tutorial.duration)" class="meta-pill" />
+                <Label col="0" :text="difficultyLabel(tutorial.difficulty)" class="meta-pill" />
+                <Label col="1" :text="formatDuration(tutorial.duration)" class="meta-pill" />
+                <Label col="2" :text="viewsLabel(tutorial.views)" class="meta-pill meta-pill-accent" />
               </GridLayout>
 
               <GridLayout row="2" col="1" colSpan="2" columns="*,auto" class="tutorial-footer">
                 <Label col="0" :text="toolsLabel(tutorial)" class="tutorial-detail" textWrap="true" />
-                <Label col="1" :text="viewsLabel(tutorial.views)" class="tutorial-views" />
+                <Label col="1" :text="instructionPreview(tutorial)" class="tutorial-preview" textWrap="true" />
               </GridLayout>
             </GridLayout>
           </StackLayout>
@@ -114,68 +155,30 @@
       <GridLayout row="1" columns="*,*,*,*,*" class="bottom-nav">
         <GridLayout col="0" class="nav-item" @tap="navigateTo('home')">
           <StackLayout class="nav-stack">
-            <Label text="🏠" class="nav-icon" />
             <Label text="Accueil" class="nav-label" />
           </StackLayout>
         </GridLayout>
         <GridLayout col="1" class="nav-item" @tap="navigateTo('reservations')">
           <StackLayout class="nav-stack">
-            <Label text="📅" class="nav-icon" />
             <Label text="Reserver" class="nav-label" />
           </StackLayout>
         </GridLayout>
         <GridLayout col="2" class="nav-item active" @tap="navigateTo('tutorials')">
           <StackLayout class="nav-stack">
-            <Label text="🎥" class="nav-icon" />
             <Label text="Tutoriels" class="nav-label" />
           </StackLayout>
         </GridLayout>
         <GridLayout col="3" class="nav-item" @tap="navigateTo('vehicles')">
           <StackLayout class="nav-stack">
-            <Label text="🚗" class="nav-icon" />
             <Label text="Vehicules" class="nav-label" />
           </StackLayout>
         </GridLayout>
         <GridLayout col="4" class="nav-item" @tap="navigateTo('profile')">
           <StackLayout class="nav-stack">
-            <Label text="👤" class="nav-icon" />
             <Label text="Profil" class="nav-label" />
           </StackLayout>
         </GridLayout>
       </GridLayout>
-    </GridLayout>
-
-    <GridLayout v-if="showDetailModal" class="sheet-backdrop" @tap="showDetailModal = false">
-      <StackLayout class="sheet" @tap="consumeTap">
-        <Label text="Detail du tutoriel" class="sheet-title" />
-        <ScrollView class="sheet-scroll">
-          <StackLayout>
-            <Label v-if="selectedTutorial" :text="selectedTutorial.title" class="detail-title" textWrap="true" />
-            <Label v-if="selectedTutorial" :text="selectedTutorial.description" class="detail-text" textWrap="true" />
-            <Label v-if="selectedTutorial" :text="'Categorie : ' + tutorialCategoryLabel(selectedTutorial.category)" class="detail-meta" />
-            <Label v-if="selectedTutorial" :text="'Niveau : ' + difficultyLabel(selectedTutorial.difficulty)" class="detail-meta" />
-            <Label v-if="selectedTutorial" :text="'Duree : ' + formatDuration(selectedTutorial.duration)" class="detail-meta" />
-            <Label v-if="selectedTutorial?.tools?.length" text="Outils requis" class="detail-subtitle" />
-            <Label v-if="selectedTutorial?.tools?.length" :text="selectedTutorial.tools.join(', ')" class="detail-text" textWrap="true" />
-            <Label v-if="selectedTutorial" text="Etapes" class="detail-subtitle" />
-            <Label
-              v-for="(instruction, idx) in selectedTutorial?.instructions || []"
-              :key="idx"
-              :text="(idx + 1) + '. ' + instruction"
-              class="detail-text"
-              textWrap="true"
-            />
-          </StackLayout>
-        </ScrollView>
-        <GridLayout columns="*,*" columnSpacing="10" class="sheet-actions">
-          <GridLayout col="0" class="sheet-btn" @tap="playVideo">
-            <Label text="Lire la video" class="sheet-btn-text" />
-          </GridLayout>
-          <GridLayout col="1" class="sheet-cancel" @tap="showDetailModal = false">
-            <Label text="Fermer" class="sheet-cancel-text" />
-          </GridLayout>
-        </GridLayout>
-      </StackLayout>
     </GridLayout>
   </Page>
 </template>
@@ -189,8 +192,6 @@ import { formatDuration, formatViews } from '@/types/tutorial'
 
 const tutorials = ref<Tutorial[]>(TutorialService.getFallbackTutorials())
 const filteredTutorials = ref<Tutorial[]>(TutorialService.getFallbackTutorials())
-const selectedTutorial = ref<Tutorial | null>(null)
-const showDetailModal = ref(false)
 const searchQuery = ref('')
 const activeCategory = ref<TutorialCategory | 'all'>('all')
 const categories = ref<TutorialCategory[]>([
@@ -205,9 +206,50 @@ const categories = ref<TutorialCategory[]>([
 ])
 
 const featuredTutorial = computed(() => filteredTutorials.value[0] ?? tutorials.value[0] ?? null)
-const featuredDurationLabel = computed(() => {
-  return featuredTutorial.value ? formatDuration(featuredTutorial.value.duration) : '0m'
+
+const categoryCount = computed(() => {
+  return new Set(tutorials.value.map(tutorial => tutorial.category)).size
 })
+
+const averageDurationLabel = computed(() => {
+  if (tutorials.value.length === 0) {
+    return '0m'
+  }
+
+  const totalDuration = tutorials.value.reduce((sum, tutorial) => sum + tutorial.duration, 0)
+  return formatDuration(Math.round(totalDuration / tutorials.value.length))
+})
+
+const resultCountLabel = computed(() => `${filteredTutorials.value.length} resultat(s)`)
+
+const viewCountLabel = computed(() => {
+  const totalViews = tutorials.value.reduce((sum, tutorial) => sum + tutorial.views, 0)
+  return `${formatViews(totalViews)} vues`
+})
+
+const catalogueSubtitle = computed(() => {
+  if (activeCategory.value === 'all' && !searchQuery.value.trim()) {
+    return 'Une bibliotheque claire pour preparer une intervention ou revoir une procedure.'
+  }
+
+  return `Filtre actif : ${chipLabel(activeCategory.value)}`
+})
+
+async function onPageLoaded() {
+  await loadTutorials()
+}
+
+async function loadTutorials() {
+  try {
+    tutorials.value = TutorialService.getFallbackTutorials()
+    filteredTutorials.value = tutorials.value
+    const data = await TutorialService.getTutorials()
+    tutorials.value = data
+    filteredTutorials.value = data
+  } catch (error) {
+    console.error('Error loading tutorials:', error)
+  }
+}
 
 function tutorialCategoryLabel(category: TutorialCategory) {
   if (category === 'entretien') return 'Entretien'
@@ -236,28 +278,35 @@ function tutorialBadge(tutorial: Tutorial) {
 }
 
 function toolsLabel(tutorial: Tutorial) {
-  return tutorial.tools?.length ? tutorial.tools.slice(0, 3).join(', ') : 'Outils a consulter'
+  if (!tutorial.tools?.length) {
+    return 'Sans outil special'
+  }
+
+  return tutorial.tools.slice(0, 3).join(', ')
+}
+
+function instructionPreview(tutorial: Tutorial) {
+  if (!tutorial.instructions?.length) {
+    return 'Voir le detail complet'
+  }
+
+  return tutorial.instructions[0]
+}
+
+function featuredSupportLabel(tutorial: Tutorial) {
+  return `${ratingLabel(tutorial.rating)} · ${viewsLabel(tutorial.views)}`
+}
+
+function ratingLabel(rating: number) {
+  if (!Number.isFinite(rating) || rating <= 0) {
+    return 'Nouveau'
+  }
+
+  return `${rating.toFixed(1)}/5`
 }
 
 function viewsLabel(views: number) {
   return `${formatViews(views)} vues`
-}
-
-async function onPageLoaded() {
-  console.log('Tutorials page loaded')
-  await loadTutorials()
-}
-
-async function loadTutorials() {
-  try {
-    tutorials.value = TutorialService.getFallbackTutorials()
-    filteredTutorials.value = tutorials.value
-    const data = await TutorialService.getTutorials()
-    tutorials.value = data
-    filteredTutorials.value = data
-  } catch (error) {
-    console.error('Error loading tutorials:', error)
-  }
 }
 
 function chipLabel(category: TutorialCategory | 'all') {
@@ -294,22 +343,11 @@ function applyFilters() {
   filteredTutorials.value = results
 }
 
-function watchTutorial(tutorial: Tutorial) {
-  selectedTutorial.value = tutorial
-  showDetailModal.value = true
-}
-
-async function playVideo() {
-  if (!selectedTutorial.value) {
-    return
-  }
-
-  await TutorialService.incrementViews(selectedTutorial.value.id)
-  console.log('Playing video:', selectedTutorial.value.videoUrl)
-}
-
-function consumeTap() {
-  return
+function openTutorial(tutorial: Tutorial) {
+  void navigateToPage('tutorialDetail', {
+    currentPage: 'tutorials',
+    props: { tutorial }
+  })
 }
 
 function navigateTo(page: AppPage) {
@@ -322,84 +360,78 @@ function goBack() {
 </script>
 
 <style scoped>
-.page { background-color: #eef1f5; }
-.action-bar { background-color: #1f2733; color: #fff; }
+.page { background-color: #eef2f7; }
+.action-bar { background-color: #111827; color: #fff; }
 .action-bar-content { padding: 0 12; height: 56; vertical-align: center; }
 .icon-back { font-size: 20; color: #fff; }
 .action-title { font-size: 18; font-weight: 700; color: #fff; vertical-align: center; }
-.page-body { background-color: #eef1f5; }
+.page-body { background-color: #eef2f7; }
 .content { padding: 16 16 24 16; }
-.inline-back {
-  width: 92;
-  background-color: #ffffff;
-  border-radius: 999;
-  padding: 10 14;
-  margin-bottom: 14;
-}
-.inline-back-text {
-  color: #1f2733;
-  font-size: 13;
-  font-weight: 800;
-}
-.hero-card { background-color: #ffffff; border-radius: 18; padding: 18; margin-bottom: 14; shadow-color: #000; shadow-opacity: 0.08; shadow-radius: 12; shadow-offset: 0 3; }
-.hero-title { color: #111827; font-size: 22; font-weight: 800; margin-bottom: 4; }
-.hero-subtitle { color: #6b7280; font-size: 13; }
-.summary-grid { column-gap: 12; margin-bottom: 16; }
-.summary-card { background-color: #ffffff; border-radius: 16; padding: 16; shadow-color: #000; shadow-opacity: 0.06; shadow-radius: 8; shadow-offset: 0 2; }
-.summary-card-dark { background-color: #1f2733; }
-.summary-value { color: #111827; font-size: 24; font-weight: 800; margin-bottom: 4; }
-.summary-value.small { font-size: 18; }
-.summary-value.light { color: #ffffff; }
-.summary-label { color: #6b7280; font-size: 12; font-weight: 600; }
-.summary-label.light { color: #cbd5e1; }
-.search-card { background-color: #ffffff; border-radius: 16; padding: 10 14; margin-bottom: 12; shadow-color: #000; shadow-opacity: 0.05; shadow-radius: 8; shadow-offset: 0 2; }
-.search-input { font-size: 14; color: #111827; }
-.chips { margin-bottom: 16; }
-.chips-row { padding-right: 6; }
+.inline-back { width: 92; background-color: #ffffff; border-radius: 999; padding: 10 14; margin-bottom: 14; }
+.inline-back-text { color: #0f172a; font-size: 13; font-weight: 800; }
+.hero-card { background-color: #111827; border-radius: 22; padding: 20; margin-bottom: 16; shadow-color: #000; shadow-opacity: 0.12; shadow-radius: 14; shadow-offset: 0 4; }
+.hero-kicker { color: #fca5a5; font-size: 11; font-weight: 800; letter-spacing: 1.4; margin-bottom: 8; }
+.hero-title { color: #ffffff; font-size: 28; font-weight: 800; margin-bottom: 8; }
+.hero-subtitle { color: #d1d5db; font-size: 13; }
+.hero-stats { margin-top: 18; }
+.hero-stat-card { background-color: rgba(255,255,255,0.08); border-radius: 16; padding: 14 12; }
+.hero-stat-value { color: #ffffff; font-size: 20; font-weight: 800; margin-bottom: 4; }
+.hero-stat-label { color: #cbd5e1; font-size: 11; font-weight: 700; }
+.search-panel { background-color: #ffffff; border-radius: 18; padding: 16; margin-bottom: 14; shadow-color: #000; shadow-opacity: 0.05; shadow-radius: 8; shadow-offset: 0 2; }
+.search-header { margin-bottom: 12; }
+.panel-title { color: #0f172a; font-size: 16; font-weight: 800; }
+.panel-copy { color: #64748b; font-size: 12; margin-top: 4; }
+.search-summary-pill { background-color: #f1f5f9; border-radius: 999; padding: 8 12; vertical-align: top; }
+.search-summary-text { color: #334155; font-size: 11; font-weight: 700; }
+.search-input { background-color: #f8fafc; border-radius: 14; padding: 12 14; font-size: 14; color: #0f172a; }
+.chips-scroll { height: 50; margin-bottom: 16; }
+.chips-row { padding-right: 4; }
 .chip { padding: 9 14; border-radius: 999; font-size: 12; font-weight: 700; margin-right: 8; }
 .chip-active { background-color: #dc2626; color: #ffffff; }
 .chip-inactive { background-color: #ffffff; color: #475569; }
-.featured-card { background-color: #1f2733; border-radius: 18; padding: 18; margin-bottom: 18; shadow-color: #000; shadow-opacity: 0.08; shadow-radius: 12; shadow-offset: 0 3; }
-.featured-kicker { color: #fca5a5; font-size: 11; font-weight: 700; margin-bottom: 6; }
-.featured-title { color: #ffffff; font-size: 18; font-weight: 800; margin-bottom: 8; }
-.featured-description { color: #d1d5db; font-size: 13; margin-bottom: 12; }
-.featured-meta { column-gap: 8; }
-.featured-pill { background-color: rgba(255, 255, 255, 0.1); color: #ffffff; font-size: 11; font-weight: 700; padding: 6 10; border-radius: 999; }
-.section-title { color: #1f2733; font-size: 16; font-weight: 800; margin-bottom: 10; }
-.empty-card { background-color: #ffffff; border-radius: 16; padding: 20; shadow-color: #000; shadow-opacity: 0.06; shadow-radius: 8; shadow-offset: 0 2; }
-.empty-title { color: #111827; font-size: 18; font-weight: 700; margin-bottom: 8; }
-.empty-text { color: #6b7280; font-size: 13; }
-.tutorial-card { background-color: #ffffff; border-radius: 16; padding: 16; margin-bottom: 12; shadow-color: #000; shadow-opacity: 0.06; shadow-radius: 8; shadow-offset: 0 2; }
-.tutorial-badge { width: 42; height: 42; border-radius: 12; background-color: #dc2626; vertical-align: top; }
-.tutorial-badge-text { color: #ffffff; font-size: 12; font-weight: 800; text-align: center; vertical-align: center; }
+.featured-card { background-color: #fff6f5; border-radius: 20; padding: 16; margin-bottom: 18; border-width: 1; border-color: #fecaca; }
+.featured-grid { column-gap: 14; }
+.featured-mark { width: 72; height: 72; border-radius: 18; background-color: #dc2626; justify-content: center; align-items: center; }
+.featured-mark-text { color: #ffffff; font-size: 18; font-weight: 800; text-align: center; }
+.featured-copy { margin-left: 12; }
+.featured-kicker { color: #b91c1c; font-size: 11; font-weight: 800; margin-bottom: 6; }
+.featured-title { color: #111827; font-size: 18; font-weight: 800; margin-bottom: 6; }
+.featured-description { color: #475569; font-size: 13; margin-bottom: 12; }
+.featured-meta { margin-bottom: 12; }
+.featured-pill { background-color: #ffffff; color: #b91c1c; font-size: 11; font-weight: 700; padding: 6 10; border-radius: 999; }
+.featured-footer { vertical-align: center; }
+.featured-support { color: #64748b; font-size: 12; margin-right: 12; }
+.featured-cta { background-color: #111827; border-radius: 999; padding: 8 12; }
+.featured-cta-text { color: #ffffff; font-size: 12; font-weight: 700; text-align: center; }
+.catalogue-header { margin-bottom: 12; }
+.section-title { color: #111827; font-size: 17; font-weight: 800; }
+.section-copy { color: #64748b; font-size: 12; margin-top: 4; }
+.catalogue-chip { background-color: #ffffff; border-radius: 999; padding: 8 12; vertical-align: center; }
+.catalogue-chip-text { color: #dc2626; font-size: 11; font-weight: 800; }
+.empty-card { background-color: #ffffff; border-radius: 18; padding: 20; }
+.empty-title { color: #111827; font-size: 18; font-weight: 800; margin-bottom: 8; }
+.empty-text { color: #64748b; font-size: 13; }
+.tutorial-card { background-color: #ffffff; border-radius: 18; padding: 16; margin-bottom: 12; shadow-color: #000; shadow-opacity: 0.05; shadow-radius: 8; shadow-offset: 0 2; }
+.tutorial-cover { width: 74; height: 96; border-radius: 18; background-color: #1f2937; padding: 10 8; justify-content: space-between; align-items: center; }
+.tutorial-cover-badge { color: #ffffff; font-size: 18; font-weight: 800; text-align: center; }
+.tutorial-cover-copy { color: #fca5a5; font-size: 10; font-weight: 700; text-transform: uppercase; }
 .tutorial-copy { margin-left: 14; margin-right: 12; }
-.tutorial-title { color: #111827; font-size: 16; font-weight: 700; }
-.tutorial-description { color: #6b7280; font-size: 13; margin-top: 4; }
-.play-btn { width: 34; height: 34; border-radius: 10; background-color: #f3f4f6; }
-.play-btn-text { color: #dc2626; font-size: 16; font-weight: 800; text-align: center; vertical-align: center; }
-.meta-row { margin-top: 12; column-gap: 8; }
-.meta-pill { background-color: #f3f4f6; color: #374151; font-size: 11; font-weight: 700; padding: 6 10; border-radius: 999; }
+.tutorial-header-row { margin-bottom: 6; }
+.mini-kicker { color: #dc2626; font-size: 11; font-weight: 800; }
+.rating-copy { color: #64748b; font-size: 11; font-weight: 700; text-align: right; }
+.tutorial-title { color: #111827; font-size: 16; font-weight: 800; }
+.tutorial-description { color: #64748b; font-size: 13; margin-top: 4; }
+.card-action { background-color: #f1f5f9; border-radius: 12; padding: 10 12; vertical-align: top; }
+.card-action-text { color: #0f172a; font-size: 12; font-weight: 700; text-align: center; }
+.meta-row { margin-top: 12; }
+.meta-pill { background-color: #f8fafc; color: #334155; font-size: 11; font-weight: 700; padding: 6 10; border-radius: 999; }
+.meta-pill-accent { color: #dc2626; }
 .tutorial-footer { margin-top: 14; }
-.tutorial-detail { color: #6b7280; font-size: 12; margin-right: 12; }
-.tutorial-views { color: #dc2626; font-size: 13; font-weight: 700; text-align: right; }
+.tutorial-detail { color: #475569; font-size: 12; margin-right: 12; }
+.tutorial-preview { color: #111827; font-size: 12; font-weight: 700; text-align: right; }
 .bottom-nav { background-color: #121826; border-top-width: 1; border-top-color: #1f2733; }
-.nav-item { align-items: center; justify-content: center; padding: 8 2 6 2; }
+.nav-item { align-items: center; justify-content: center; padding: 10 4 4 4; }
 .nav-stack { horizontal-align: center; vertical-align: center; height: 60; }
-.nav-icon { font-size: 22; text-align: center; color: #f0f2f6; margin-bottom: 4; vertical-align: top; }
-.nav-label { font-size: 11; font-weight: 700; text-align: center; color: #f0f2f6; vertical-align: bottom; }
-.nav-item.active .nav-icon { color: #dc2626; }
-.nav-item.active .nav-label { color: #dc2626; font-weight: 700; }
-.sheet-backdrop { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.4); justify-content: center; align-items: center; }
-.sheet { background-color: #1f2733; padding: 18 16 16 16; border-radius: 14; width: 88%; max-height: 80%; }
-.sheet-title { color: #fff; font-size: 16; font-weight: 700; text-align: center; margin-bottom: 10; }
-.sheet-scroll { max-height: 420; }
-.detail-title { color: #fff; font-size: 15; font-weight: 700; margin-bottom: 6; }
-.detail-text { color: #d1d5db; font-size: 13; margin-bottom: 4; }
-.detail-meta { color: #fca5a5; font-size: 12; font-weight: 600; margin-bottom: 4; }
-.detail-subtitle { color: #fff; font-weight: 700; font-size: 13; margin-top: 8; margin-bottom: 2; }
-.sheet-actions { margin-top: 12; }
-.sheet-btn { background-color: #dc2626; border-radius: 10; padding: 10; }
-.sheet-btn-text { color: #fff; font-size: 14; font-weight: 700; text-align: center; }
-.sheet-cancel { background-color: #2c3544; border-radius: 10; padding: 10; }
-.sheet-cancel-text { color: #d1d5db; font-size: 14; text-align: center; }
+.nav-label { font-size: 12; color: #9ca3af; font-weight: 700; text-align: center; }
+.nav-item.active .nav-label { color: #dc2626; }
 </style>
