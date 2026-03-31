@@ -39,6 +39,11 @@ admin-web/.env
 admin-web/.env.*
 backend/.env
 backend/.env.*
+backend/uploads/*
+!backend/uploads/.gitkeep
+!backend/uploads/tutorials/
+backend/uploads/tutorials/*
+!backend/uploads/tutorials/.gitkeep
 frontend/.env
 frontend/.env.*
 deploy/certs/*

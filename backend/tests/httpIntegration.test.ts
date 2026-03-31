@@ -188,6 +188,27 @@ async function formRequest(
     text: await response.text()
   };
 }
+
+async function multipartRequest<T = unknown>(
+  path: string,
+  formData: FormData,
+  options: {
+    method?: string;
+    token?: string;
+  } = {}
+) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: options.method ?? 'POST',
+    headers: {
+      ...(options.token ? { authorization: `Bearer ${options.token}` } : {})
+    },
+    body: formData
+  });
+
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) as T : null;
+  return { response, payload };
+}
 async function registerUser() {
   const email = `integration-${randomBytes(4).toString('hex')}@example.com`;
   const password = 'Garage123!';
@@ -711,6 +732,58 @@ runIntegrationTest('admin web and admin APIs are protected and allow service and
   assert.equal(slotsResult.response.status, 200);
   assert.deepEqual(slotsResult.payload, ['09:15', '14:45']);
 
+  const updatedServiceResult = await apiRequest<{
+    id: string;
+    label: string;
+    slotTimes: string[];
+    price: number;
+    active: boolean;
+  }>('/api/admin/services/entretien-climatisation', {
+    method: 'PUT',
+    token: adminSession.accessToken,
+    body: {
+      label: 'Climatisation premium',
+      description: 'Service revise pour la haute saison',
+      durationMinutes: 65,
+      price: 139.99,
+      slotTimes: ['08:45', '13:15', '17:30']
+    }
+  });
+  assert.equal(updatedServiceResult.response.status, 200);
+  assert.equal(updatedServiceResult.payload?.label, 'Climatisation premium');
+  assert.equal(updatedServiceResult.payload?.price, 139.99);
+  assert.deepEqual(updatedServiceResult.payload?.slotTimes, ['08:45', '13:15', '17:30']);
+
+  const updatedReservationServicesResult = await apiRequest<Array<{ id: string; label: string }>>(
+    '/api/reservations/services'
+  );
+  assert.equal(updatedReservationServicesResult.response.status, 200);
+  assert.ok(
+    updatedReservationServicesResult.payload?.some(
+      service => service.id === 'entretien-climatisation' && service.label === 'Climatisation premium'
+    )
+  );
+
+  const deletedServiceResult = await apiRequest<{ id: string; active: boolean }>(
+    '/api/admin/services/entretien-climatisation',
+    {
+      method: 'DELETE',
+      token: adminSession.accessToken
+    }
+  );
+  assert.equal(deletedServiceResult.response.status, 200);
+  assert.equal(deletedServiceResult.payload?.active, false);
+
+  const reservationServicesAfterDeleteResult = await apiRequest<Array<{ id: string; label: string }>>(
+    '/api/reservations/services'
+  );
+  assert.equal(reservationServicesAfterDeleteResult.response.status, 200);
+  assert.ok(
+    reservationServicesAfterDeleteResult.payload?.every(
+      service => service.id !== 'entretien-climatisation'
+    )
+  );
+
   const reservationsResult = await apiRequest<Array<{ id: string; serviceId: string; serviceLabel: string }>>(
     '/api/admin/reservations',
     {
@@ -720,31 +793,37 @@ runIntegrationTest('admin web and admin APIs are protected and allow service and
   assert.equal(reservationsResult.response.status, 200);
   assert.ok(Array.isArray(reservationsResult.payload));
 
-  const createdTutorialResult = await apiRequest<{
+  const tutorialFormData = new FormData();
+  tutorialFormData.set('title', 'Verifier la batterie');
+  tutorialFormData.set('description', 'Tutoriel admin pour la console web');
+  tutorialFormData.set('category', 'batterie');
+  tutorialFormData.set('difficulty', 'facile');
+  tutorialFormData.set('duration', '12');
+  tutorialFormData.set('instructions', 'Couper le moteur\nVerifier la tension');
+  tutorialFormData.set('tools', 'Multimetre');
+  tutorialFormData.set('thumbnail', 'https://example.com/battery.png');
+  tutorialFormData.set(
+    'videoFile',
+    new Blob(['fake-video-bytes'], { type: 'video/mp4' }),
+    'battery.mp4'
+  );
+
+  const createdTutorialResult = await multipartRequest<{
     id: string;
     title: string;
     category: string;
     difficulty: string;
     videoUrl: string;
-  }>('/api/tutorials', {
-    method: 'POST',
-    token: adminSession.accessToken,
-    body: {
-      title: 'Verifier la batterie',
-      description: 'Tutoriel admin pour la console web',
-      category: 'batterie',
-      difficulty: 'facile',
-      duration: 12,
-      thumbnail: 'https://example.com/battery.png',
-      videoUrl: 'https://example.com/battery.mp4',
-      instructions: ['Couper le moteur', 'Verifier la tension'],
-      tools: ['Multimetre']
-    }
+  }>('/api/admin/tutorials', tutorialFormData, {
+    token: adminSession.accessToken
   });
   assert.equal(createdTutorialResult.response.status, 201);
   assert.equal(createdTutorialResult.payload?.title, 'Verifier la batterie');
+  assert.match(createdTutorialResult.payload?.videoUrl ?? '', /\/uploads\/tutorials\//i);
 
-  const listTutorialsResult = await apiRequest<Array<{ id: string; title: string }>>('/api/tutorials');
+  const listTutorialsResult = await apiRequest<Array<{ id: string; title: string }>>('/api/admin/tutorials', {
+    token: adminSession.accessToken
+  });
   assert.equal(listTutorialsResult.response.status, 200);
   assert.ok(
     listTutorialsResult.payload?.some(item => item.id === createdTutorialResult.payload?.id)

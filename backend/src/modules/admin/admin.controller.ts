@@ -1,11 +1,13 @@
-import { ReservationStatus, Role } from '@prisma/client';
+import { ReservationStatus, Role, TutorialCategory, TutorialDifficulty } from '@prisma/client';
 import { Request, Response } from 'express';
 import { prisma } from '../../data/prisma/client';
 import { AppError } from '../../shared/errors';
 import {
+  archiveReservationServiceRecord,
   buildReservationServiceMap,
   createReservationServiceRecord,
-  listReservationServiceCatalog
+  listReservationServiceCatalog,
+  updateReservationServiceRecord
 } from '../reservations/reservationServices.store';
 
 type AdminSummaryPayload = {
@@ -64,6 +66,23 @@ type AdminReservationPayload = {
   notes: string | null;
 };
 
+type AdminTutorialPayload = {
+  id: string;
+  title: string;
+  description: string;
+  category: TutorialCategory;
+  difficulty: TutorialDifficulty;
+  duration: number;
+  views: number;
+  rating: number;
+  thumbnail: string;
+  videoUrl: string;
+  instructions: string[];
+  tools: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 function toIso(value: Date) {
   return value.toISOString();
 }
@@ -74,6 +93,11 @@ function normalizeTrimmedString(value: unknown) {
   }
 
   return value.trim();
+}
+
+function normalizeOptionalTrimmedString(value: unknown) {
+  const normalized = normalizeTrimmedString(value);
+  return normalized.length > 0 ? normalized : null;
 }
 
 function normalizePositiveInteger(value: unknown, fieldName: string) {
@@ -125,6 +149,29 @@ function normalizeSlotTimes(value: unknown) {
   return slotTimes.sort((left, right) => left.localeCompare(right));
 }
 
+function normalizeStringList(value: unknown, fieldName: string, options?: { required?: boolean }) {
+  const entries =
+    Array.isArray(value)
+      ? value
+      : typeof value === 'string'
+        ? value.split(/[\n,;]/)
+        : [];
+
+  const normalized = Array.from(
+    new Set(
+      entries
+        .map(item => String(item).trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (options?.required && normalized.length === 0) {
+    throw new AppError(`${fieldName} est obligatoire.`, 400);
+  }
+
+  return normalized;
+}
+
 function slugifyService(value: string) {
   return value
     .normalize('NFD')
@@ -155,6 +202,112 @@ function normalizeServiceDraft(body: unknown) {
     durationMinutes: normalizePositiveInteger(payload.durationMinutes, 'La duree'),
     price: normalizePositiveAmount(payload.price),
     slotTimes: normalizeSlotTimes(payload.slotTimes)
+  };
+}
+
+function normalizeTutorialCategory(value: unknown): TutorialCategory {
+  switch (normalizeTrimmedString(value).toLowerCase()) {
+    case 'freins':
+      return TutorialCategory.freins;
+    case 'suspension':
+      return TutorialCategory.suspension;
+    case 'batterie':
+      return TutorialCategory.batterie;
+    case 'diagnostic':
+      return TutorialCategory.diagnostic;
+    case 'eclairage':
+      return TutorialCategory.eclairage;
+    case 'fluide':
+      return TutorialCategory.fluide;
+    case 'mecanique':
+      return TutorialCategory.mecanique;
+    case 'entretien':
+    default:
+      return TutorialCategory.entretien;
+  }
+}
+
+function normalizeTutorialDifficulty(value: unknown): TutorialDifficulty {
+  switch (normalizeTrimmedString(value).toLowerCase()) {
+    case 'difficile':
+      return TutorialDifficulty.difficile;
+    case 'moyen':
+      return TutorialDifficulty.moyen;
+    case 'facile':
+    default:
+      return TutorialDifficulty.facile;
+  }
+}
+
+function buildPublicAssetUrl(req: Request, relativePath: string) {
+  return `${req.protocol}://${req.get('host')}${relativePath}`;
+}
+
+function mapAdminTutorial(tutorial: {
+  id: string;
+  title: string;
+  description: string;
+  category: TutorialCategory;
+  difficulty: TutorialDifficulty;
+  duration: number;
+  views: number;
+  rating: number;
+  thumbnail: string;
+  videoUrl: string;
+  instructions: unknown;
+  tools: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}): AdminTutorialPayload {
+  return {
+    id: tutorial.id,
+    title: tutorial.title,
+    description: tutorial.description,
+    category: tutorial.category,
+    difficulty: tutorial.difficulty,
+    duration: tutorial.duration,
+    views: tutorial.views,
+    rating: tutorial.rating,
+    thumbnail: tutorial.thumbnail,
+    videoUrl: tutorial.videoUrl,
+    instructions: Array.isArray(tutorial.instructions)
+      ? tutorial.instructions.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    tools: Array.isArray(tutorial.tools)
+      ? tutorial.tools.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    createdAt: toIso(tutorial.createdAt),
+    updatedAt: toIso(tutorial.updatedAt)
+  };
+}
+
+function normalizeTutorialDraft(req: Request) {
+  const payload = req.body as Record<string, unknown>;
+  const title = normalizeTrimmedString(payload.title);
+  const description = normalizeTrimmedString(payload.description);
+
+  if (title.length < 4) {
+    throw new AppError('Le titre du tutoriel est obligatoire.', 400);
+  }
+
+  if (description.length < 8) {
+    throw new AppError('La description du tutoriel est obligatoire.', 400);
+  }
+
+  if (!req.file) {
+    throw new AppError('Ajoutez un fichier video depuis votre ordinateur.', 400);
+  }
+
+  return {
+    title,
+    description,
+    category: normalizeTutorialCategory(payload.category),
+    difficulty: normalizeTutorialDifficulty(payload.difficulty),
+    duration: normalizePositiveInteger(payload.duration, 'La duree'),
+    thumbnail: normalizeOptionalTrimmedString(payload.thumbnail) || 'https://placehold.co/640x360?text=Garage+Mechanic',
+    videoUrl: buildPublicAssetUrl(req, `/uploads/tutorials/${req.file.filename}`),
+    instructions: normalizeStringList(payload.instructions, 'Au moins une instruction', { required: true }),
+    tools: normalizeStringList(payload.tools, 'Les outils')
   };
 }
 
@@ -348,6 +501,30 @@ async function buildAdminReservations() {
   })) satisfies AdminReservationPayload[];
 }
 
+async function buildAdminTutorials() {
+  const tutorials = await prisma.tutorial.findMany({
+    orderBy: [{ createdAt: 'desc' }],
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      category: true,
+      difficulty: true,
+      duration: true,
+      views: true,
+      rating: true,
+      thumbnail: true,
+      videoUrl: true,
+      instructions: true,
+      tools: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
+
+  return tutorials.map(mapAdminTutorial);
+}
+
 function toAdminErrorResponse(res: Response, error: unknown) {
   const status = error instanceof AppError ? error.status : 500;
   const message = error instanceof Error ? error.message : 'Internal error';
@@ -407,12 +584,109 @@ export async function createAdminService(req: Request, res: Response) {
   }
 }
 
+export async function updateAdminService(req: Request, res: Response) {
+  try {
+    const serviceId = normalizeTrimmedString(req.params.serviceId);
+    if (!serviceId) {
+      throw new AppError('Service introuvable.', 404);
+    }
+
+    const draft = normalizeServiceDraft(req.body);
+    const updated = await updateReservationServiceRecord(serviceId, {
+      label: draft.label,
+      description: draft.description,
+      durationMinutes: draft.durationMinutes,
+      price: draft.price,
+      slotTimes: draft.slotTimes
+    });
+
+    if (!updated) {
+      throw new AppError('Service introuvable.', 404);
+    }
+
+    res.json(updated);
+  } catch (error) {
+    return toAdminErrorResponse(res, error);
+  }
+}
+
+export async function deleteAdminService(req: Request, res: Response) {
+  try {
+    const serviceId = normalizeTrimmedString(req.params.serviceId);
+    if (!serviceId) {
+      throw new AppError('Service introuvable.', 404);
+    }
+
+    const archived = await archiveReservationServiceRecord(serviceId);
+    if (!archived) {
+      throw new AppError('Service introuvable.', 404);
+    }
+
+    res.json(archived);
+  } catch (error) {
+    return toAdminErrorResponse(res, error);
+  }
+}
+
+export async function listAdminTutorials(_req: Request, res: Response) {
+  try {
+    res.json(await buildAdminTutorials());
+  } catch (error) {
+    return toAdminErrorResponse(res, error);
+  }
+}
+
+export async function createAdminTutorial(req: Request, res: Response) {
+  try {
+    const draft = normalizeTutorialDraft(req);
+    const created = await prisma.tutorial.create({
+      data: {
+        title: draft.title,
+        description: draft.description,
+        category: draft.category,
+        difficulty: draft.difficulty,
+        duration: draft.duration,
+        views: 0,
+        rating: 0,
+        thumbnail: draft.thumbnail,
+        videoUrl: draft.videoUrl,
+        instructions: draft.instructions,
+        tools: draft.tools
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        category: true,
+        difficulty: true,
+        duration: true,
+        views: true,
+        rating: true,
+        thumbnail: true,
+        videoUrl: true,
+        instructions: true,
+        tools: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    res.status(201).json(mapAdminTutorial(created));
+  } catch (error) {
+    return toAdminErrorResponse(res, error);
+  }
+}
+
 export const __adminControllerInternals = {
   normalizeTrimmedString,
+  normalizeOptionalTrimmedString,
   normalizePositiveInteger,
   normalizePositiveAmount,
   normalizeSlotTimes,
+  normalizeStringList,
   slugifyService,
   normalizeServiceDraft,
+  normalizeTutorialCategory,
+  normalizeTutorialDifficulty,
   formatReservationStatus
 };

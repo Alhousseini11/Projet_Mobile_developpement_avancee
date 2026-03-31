@@ -52,6 +52,10 @@ function buildDefaultReservationServiceMap() {
   );
 }
 
+function findDefaultReservationServiceDefinition(serviceId: string) {
+  return DEFAULT_RESERVATION_SERVICE_DEFINITIONS.find(service => service.id === serviceId) ?? null;
+}
+
 function toNumber(value: Prisma.Decimal) {
   return Number(value.toFixed(2));
 }
@@ -143,6 +147,131 @@ export async function createReservationServiceRecord(input: {
       price: new Prisma.Decimal(input.price.toFixed(2)),
       slotTimes: normalizeSlotTimes(input.slotTimes),
       active: true
+    }
+  });
+
+  return toReservationServiceRecord({
+    slug: created.slug,
+    label: created.label,
+    description: created.description,
+    durationMinutes: created.durationMinutes,
+    price: toNumber(created.price),
+    slotTimes: normalizeSlotTimes(created.slotTimes),
+    active: created.active
+  });
+}
+
+export async function updateReservationServiceRecord(
+  serviceId: string,
+  input: {
+    label: string;
+    description?: string | null;
+    durationMinutes: number;
+    price: number;
+    slotTimes: string[];
+  }
+) {
+  const existing = await prisma.reservationService.findUnique({
+    where: {
+      slug: serviceId
+    }
+  });
+
+  if (existing) {
+    const updated = await prisma.reservationService.update({
+      where: {
+        slug: serviceId
+      },
+      data: {
+        label: input.label,
+        description: input.description ?? null,
+        durationMinutes: input.durationMinutes,
+        price: new Prisma.Decimal(input.price.toFixed(2)),
+        slotTimes: normalizeSlotTimes(input.slotTimes)
+      }
+    });
+
+    return toReservationServiceRecord({
+      slug: updated.slug,
+      label: updated.label,
+      description: updated.description,
+      durationMinutes: updated.durationMinutes,
+      price: toNumber(updated.price),
+      slotTimes: normalizeSlotTimes(updated.slotTimes),
+      active: updated.active
+    });
+  }
+
+  const defaultService = findDefaultReservationServiceDefinition(serviceId);
+  if (!defaultService) {
+    return null;
+  }
+
+  const created = await prisma.reservationService.create({
+    data: {
+      slug: serviceId,
+      label: input.label,
+      description: input.description ?? null,
+      durationMinutes: input.durationMinutes,
+      price: new Prisma.Decimal(input.price.toFixed(2)),
+      slotTimes: normalizeSlotTimes(input.slotTimes),
+      active: true
+    }
+  });
+
+  return toReservationServiceRecord({
+    slug: created.slug,
+    label: created.label,
+    description: created.description,
+    durationMinutes: created.durationMinutes,
+    price: toNumber(created.price),
+    slotTimes: normalizeSlotTimes(created.slotTimes),
+    active: created.active
+  });
+}
+
+export async function archiveReservationServiceRecord(serviceId: string) {
+  const existing = await prisma.reservationService.findUnique({
+    where: {
+      slug: serviceId
+    }
+  });
+
+  if (existing) {
+    const updated = await prisma.reservationService.update({
+      where: {
+        slug: serviceId
+      },
+      data: {
+        active: false
+      }
+    });
+
+    return toReservationServiceRecord({
+      slug: updated.slug,
+      label: updated.label,
+      description: updated.description,
+      durationMinutes: updated.durationMinutes,
+      price: toNumber(updated.price),
+      slotTimes: normalizeSlotTimes(updated.slotTimes),
+      active: updated.active
+    });
+  }
+
+  const defaultService = findDefaultReservationServiceDefinition(serviceId);
+  if (!defaultService) {
+    return null;
+  }
+
+  const created = await prisma.reservationService.create({
+    data: {
+      slug: defaultService.id,
+      label: defaultService.label,
+      description: defaultService.description,
+      durationMinutes: defaultService.durationMinutes,
+      price: new Prisma.Decimal(defaultService.price.toFixed(2)),
+      slotTimes: normalizeSlotTimes(defaultService.slotTimes),
+      active: false
     }
   });
 

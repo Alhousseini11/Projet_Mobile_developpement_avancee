@@ -1,7 +1,7 @@
 export const DEFAULT_THUMBNAIL = 'https://placehold.co/640x360?text=Garage+Mechanic';
 
-export function escapeHtml(value: string) {
-  return value
+export function escapeHtml(value: unknown) {
+  return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

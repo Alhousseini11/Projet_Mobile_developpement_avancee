@@ -39,3 +39,76 @@ test('normalizePositiveAmount rejects invalid service price input', () => {
     /prix doit etre un nombre positif/i
   );
 });
+
+test('normalizeTutorialCategory and difficulty map known admin values', () => {
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('freins'), 'freins');
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('inconnu'), 'entretien');
+  assert.equal(__adminControllerInternals.normalizeTutorialDifficulty('difficile'), 'difficile');
+  assert.equal(__adminControllerInternals.normalizeTutorialDifficulty('autre'), 'facile');
+});
+
+test('normalizeStringList trims values and enforces required lists', () => {
+  assert.deepEqual(
+    __adminControllerInternals.normalizeStringList('Lever la voiture\nVerifier les freins\nLever la voiture', 'Instructions', {
+      required: true
+    }),
+    ['Lever la voiture', 'Verifier les freins']
+  );
+
+  assert.throws(
+    () => __adminControllerInternals.normalizeStringList('', 'Instructions', { required: true }),
+    /Instructions est obligatoire/i
+  );
+});
+
+test('normalizeTutorialCategory and difficulty cover all known admin values', () => {
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('entretien'), 'entretien');
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('freins'), 'freins');
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('suspension'), 'suspension');
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('batterie'), 'batterie');
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('diagnostic'), 'diagnostic');
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('eclairage'), 'eclairage');
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('fluide'), 'fluide');
+  assert.equal(__adminControllerInternals.normalizeTutorialCategory('mecanique'), 'mecanique');
+
+  assert.equal(__adminControllerInternals.normalizeTutorialDifficulty('facile'), 'facile');
+  assert.equal(__adminControllerInternals.normalizeTutorialDifficulty('moyen'), 'moyen');
+  assert.equal(__adminControllerInternals.normalizeTutorialDifficulty('difficile'), 'difficile');
+});
+
+test('admin controller internals normalize optional fields and reject invalid numeric inputs', () => {
+  assert.equal(__adminControllerInternals.normalizeOptionalTrimmedString('  note atelier  '), 'note atelier');
+  assert.equal(__adminControllerInternals.normalizeOptionalTrimmedString('   '), null);
+
+  assert.equal(__adminControllerInternals.normalizePositiveInteger('42', 'La duree'), 42);
+  assert.throws(
+    () => __adminControllerInternals.normalizePositiveInteger('0', 'La duree'),
+    /duree doit etre un entier positif/i
+  );
+});
+
+test('normalizeSlotTimes rejects invalid time formats and normalizeServiceDraft keeps explicit slug', () => {
+  assert.throws(
+    () => __adminControllerInternals.normalizeSlotTimes(['9h00']),
+    /Horaire invalide/i
+  );
+
+  assert.deepEqual(
+    __adminControllerInternals.normalizeServiceDraft({
+      label: 'Revision complete',
+      slug: 'revision-sport',
+      description: 'Pack premium',
+      durationMinutes: 90,
+      price: 189.5,
+      slotTimes: ['16:00', '08:30']
+    }),
+    {
+      slug: 'revision-sport',
+      label: 'Revision complete',
+      description: 'Pack premium',
+      durationMinutes: 90,
+      price: 189.5,
+      slotTimes: ['08:30', '16:00']
+    }
+  );
+});
