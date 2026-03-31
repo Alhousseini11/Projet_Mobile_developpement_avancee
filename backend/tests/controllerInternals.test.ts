@@ -145,6 +145,21 @@ test('tutorial controller internals normalize categories, difficulty and catalog
   assert.equal(__tutorialControllerInternals.normalizeDuration(null), 0);
   assert.equal(__tutorialControllerInternals.normalizeDurationFromSeconds(90), 2);
   assert.equal(__tutorialControllerInternals.normalizeDurationFromSeconds(null), 0);
+  assert.equal(__tutorialControllerInternals.shouldCountQualifiedTutorialView(null), true);
+  assert.equal(
+    __tutorialControllerInternals.shouldCountQualifiedTutorialView(
+      new Date('2026-03-24T10:00:00.000Z'),
+      new Date('2026-03-24T14:00:00.000Z')
+    ),
+    false
+  );
+  assert.equal(
+    __tutorialControllerInternals.shouldCountQualifiedTutorialView(
+      new Date('2026-03-24T10:00:00.000Z'),
+      new Date('2026-03-25T11:00:00.000Z')
+    ),
+    true
+  );
 
   assert.deepEqual(
     __tutorialControllerInternals.ensureStringArray(['A', 42, 'B', null]),

@@ -96,6 +96,7 @@ model User {
   quotes               Quote[]
   paymentMethod        PaymentMethod?
   passwordResetCodes   PasswordResetCode[]
+  tutorialViews        TutorialView[]
   profileSettings      UserProfileSettings?
   notifications        Notification[]
   messagesSent         ChatMessage[]   @relation("MessagesSent")
@@ -240,8 +241,20 @@ model Tutorial {
   instructions Json
   tools        Json?
   favorites    Favorite[]
+  tutorialViews TutorialView[]
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
+}
+
+model TutorialView {
+  userId       String
+  tutorialId   String
+  lastViewedAt DateTime           @default(now())
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tutorial     Tutorial           @relation(fields: [tutorialId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tutorialId])
+  @@index([lastViewedAt])
 }
 
 model Favorite {

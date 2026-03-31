@@ -1547,13 +1547,82 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   assert.equal(tutorialByIdResult.response.status, 200);
   assert.equal(tutorialByIdResult.payload?.id, createTutorialResult.payload?.id);
 
-  const incrementViewsResult = await apiRequest<null>(
+  const anonymousIncrementViewsResult = await apiRequest<null>(
     `/api/tutorials/${createTutorialResult.payload?.id}/views`,
     {
       method: 'POST'
     }
   );
-  assert.equal(incrementViewsResult.response.status, 204);
+  assert.equal(anonymousIncrementViewsResult.response.status, 204);
+
+  const tutorialAfterAnonymousViewResult = await apiRequest<{ id: string; views: number }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}`
+  );
+  assert.equal(tutorialAfterAnonymousViewResult.response.status, 200);
+  assert.equal(tutorialAfterAnonymousViewResult.payload?.views, 4);
+
+  const firstIncrementViewsResult = await apiRequest<null>(
+    `/api/tutorials/${createTutorialResult.payload?.id}/views`,
+    {
+      method: 'POST',
+      token: session.accessToken
+    }
+  );
+  assert.equal(firstIncrementViewsResult.response.status, 204);
+
+  const tutorialAfterFirstQualifiedViewResult = await apiRequest<{ id: string; views: number }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}`
+  );
+  assert.equal(tutorialAfterFirstQualifiedViewResult.response.status, 200);
+  assert.equal(tutorialAfterFirstQualifiedViewResult.payload?.views, 5);
+
+  const secondIncrementViewsResult = await apiRequest<null>(
+    `/api/tutorials/${createTutorialResult.payload?.id}/views`,
+    {
+      method: 'POST',
+      token: session.accessToken
+    }
+  );
+  assert.equal(secondIncrementViewsResult.response.status, 204);
+
+  const tutorialAfterSecondQualifiedViewResult = await apiRequest<{ id: string; views: number }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}`
+  );
+  assert.equal(tutorialAfterSecondQualifiedViewResult.response.status, 200);
+  assert.equal(tutorialAfterSecondQualifiedViewResult.payload?.views, 5);
+
+  const sessionUser = await prismaClient.user.findUnique({
+    where: { email: session.email },
+    select: { id: true }
+  });
+  assert.ok(sessionUser?.id);
+
+  await prismaClient.tutorialView.update({
+    where: {
+      userId_tutorialId: {
+        userId: sessionUser.id,
+        tutorialId: createTutorialResult.payload!.id
+      }
+    },
+    data: {
+      lastViewedAt: new Date(Date.now() - (25 * 60 * 60 * 1000))
+    }
+  });
+
+  const thirdIncrementViewsResult = await apiRequest<null>(
+    `/api/tutorials/${createTutorialResult.payload?.id}/views`,
+    {
+      method: 'POST',
+      token: session.accessToken
+    }
+  );
+  assert.equal(thirdIncrementViewsResult.response.status, 204);
+
+  const tutorialAfterThirdQualifiedViewResult = await apiRequest<{ id: string; views: number }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}`
+  );
+  assert.equal(tutorialAfterThirdQualifiedViewResult.response.status, 200);
+  assert.equal(tutorialAfterThirdQualifiedViewResult.payload?.views, 6);
 
   const rateTutorialResult = await apiRequest<{ id: string; rating: number }>(
     `/api/tutorials/${createTutorialResult.payload?.id}/rate`,
@@ -1614,7 +1683,8 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   assert.equal(forbiddenTutorialUpdateResult.response.status, 403);
 
   const missingTutorialViewResult = await apiRequest<null>('/api/tutorials/missing-id/views', {
-    method: 'POST'
+    method: 'POST',
+    token: session.accessToken
   });
   assert.equal(missingTutorialViewResult.response.status, 204);
 
