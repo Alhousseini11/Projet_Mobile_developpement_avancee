@@ -26,7 +26,9 @@
 </template>
 
 <script lang="ts" setup>
+import { onBeforeUnmount, onMounted } from 'vue'
 import type { Tutorial } from '@/types/tutorial'
+import TutorialService from '@/services/TutorialService'
 import { goBack } from '@/utils/navigation'
 
 const props = defineProps<{
@@ -34,6 +36,9 @@ const props = defineProps<{
 }>()
 
 const tutorial = props.tutorial
+const QUALIFIED_VIEW_DELAY_MS = 5000
+let viewQualificationTimer: ReturnType<typeof setTimeout> | null = null
+let viewCountRequested = false
 
 const playerHtmlSrc = `<!DOCTYPE html>
 <html lang="fr">
@@ -95,8 +100,43 @@ function escapeAttribute(value: string) {
 }
 
 function closePlayer() {
+  clearViewQualificationTimer()
   goBack()
 }
+
+function clearViewQualificationTimer() {
+  if (!viewQualificationTimer) {
+    return
+  }
+
+  clearTimeout(viewQualificationTimer)
+  viewQualificationTimer = null
+}
+
+function scheduleQualifiedViewCount() {
+  clearViewQualificationTimer()
+
+  if (!tutorial.videoUrl?.trim()) {
+    return
+  }
+
+  viewQualificationTimer = setTimeout(() => {
+    if (viewCountRequested) {
+      return
+    }
+
+    viewCountRequested = true
+    void TutorialService.incrementViews(tutorial.id)
+  }, QUALIFIED_VIEW_DELAY_MS)
+}
+
+onMounted(() => {
+  scheduleQualifiedViewCount()
+})
+
+onBeforeUnmount(() => {
+  clearViewQualificationTimer()
+})
 </script>
 
 <style scoped>

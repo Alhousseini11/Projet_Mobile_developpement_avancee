@@ -86,7 +86,6 @@
 import { alert } from '@nativescript/core'
 import type { Tutorial, TutorialCategory } from '@/types/tutorial'
 import { formatDuration, formatViews } from '@/types/tutorial'
-import TutorialService from '@/services/TutorialService'
 import { goBack, navigateToPage, type AppPage } from '@/utils/navigation'
 
 const props = defineProps<{
@@ -127,7 +126,6 @@ async function playVideo() {
     return
   }
 
-  void TutorialService.incrementViews(tutorial.id)
   void navigateToPage('tutorialVideo', {
     currentPage: 'tutorialDetail',
     props: { tutorial }

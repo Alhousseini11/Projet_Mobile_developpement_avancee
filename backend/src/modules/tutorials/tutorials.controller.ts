@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
+import { resolveOptionalRequestUser } from '../auth/auth.service';
 import { isSchemaDriftError } from '../_shared/isSchemaDriftError';
 import { isCurrentTutorialSchemaAvailable } from '../_shared/schemaCapabilities';
 
@@ -67,6 +68,8 @@ const FALLBACK_TUTORIALS: TutorialResponse[] = [
     updatedAt: new Date('2026-01-01T09:00:00.000Z')
   }
 ];
+
+const QUALIFIED_TUTORIAL_VIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function normalizeDate(value: Date | string | null | undefined) {
   if (value instanceof Date) {
@@ -152,6 +155,21 @@ function normalizeDurationFromSeconds(durationSec: number | null | undefined) {
   }
 
   return Math.max(1, Math.round(Number(durationSec) / 60));
+}
+
+function shouldCountQualifiedTutorialView(
+  lastViewedAt: Date | string | null | undefined,
+  reference: Date = new Date()
+) {
+  if (!(lastViewedAt instanceof Date)) {
+    return true;
+  }
+
+  if (Number.isNaN(lastViewedAt.getTime())) {
+    return true;
+  }
+
+  return reference.getTime() - lastViewedAt.getTime() >= QUALIFIED_TUTORIAL_VIEW_WINDOW_MS;
 }
 
 function cloneTutorial(tutorial: TutorialResponse): TutorialResponse {
@@ -411,14 +429,67 @@ export async function getTopRatedTutorials(req: Request, res: Response) {
 
 export async function incrementTutorialViews(req: Request, res: Response) {
   const { id } = req.params;
+  const authUser = await resolveOptionalRequestUser(req);
+
+  if (!authUser?.id) {
+    res.status(204).end();
+    return;
+  }
+
+  const viewedAt = new Date();
 
   try {
-    await prisma.tutorial.update({
-      where: { id },
-      data: { views: { increment: 1 } }
+    await prisma.$transaction(async tx => {
+      const tutorial = await tx.tutorial.findUnique({
+        where: { id },
+        select: { id: true }
+      });
+
+      if (!tutorial) {
+        return;
+      }
+
+      const existingView = await tx.tutorialView.findUnique({
+        where: {
+          userId_tutorialId: {
+            userId: authUser.id,
+            tutorialId: id
+          }
+        },
+        select: { lastViewedAt: true }
+      });
+
+      if (!shouldCountQualifiedTutorialView(existingView?.lastViewedAt, viewedAt)) {
+        return;
+      }
+
+      if (existingView) {
+        await tx.tutorialView.update({
+          where: {
+            userId_tutorialId: {
+              userId: authUser.id,
+              tutorialId: id
+            }
+          },
+          data: { lastViewedAt: viewedAt }
+        });
+      } else {
+        await tx.tutorialView.create({
+          data: {
+            userId: authUser.id,
+            tutorialId: id,
+            lastViewedAt: viewedAt
+          }
+        });
+      }
+
+      await tx.tutorial.update({
+        where: { id },
+        data: { views: { increment: 1 } }
+      });
     });
   } catch (error) {
-    logger.warn({ err: error, tutorialId: id }, 'Tutorial views increment skipped');
+    logger.warn({ err: error, tutorialId: id, userId: authUser.id }, 'Tutorial views increment skipped');
   }
 
   res.status(204).end();
@@ -452,6 +523,7 @@ export const __tutorialControllerInternals = {
   normalizeDifficulty,
   normalizeDuration,
   normalizeDurationFromSeconds,
+  shouldCountQualifiedTutorialView,
   cloneTutorial,
   mapCurrentTutorial,
   mapLegacyTutorial
