@@ -194,6 +194,10 @@ import { alert } from '@nativescript/core'
 import { computed, ref } from 'nativescript-vue'
 import ReservationService from '@/services/ReservationService'
 import VehicleService from '@/services/VehicleService'
+import {
+  buildReservationSchedulePlans,
+  type ReservationSchedulePlan
+} from '@/utils/reservationScheduling'
 import { formatCurrency } from '@/utils/ui'
 import { goBack as navigateBack, navigateToPage, type AppPage } from '@/utils/navigation'
 import type { Reservation, ReservationServiceOption } from '@/types/reservation'
@@ -264,6 +268,7 @@ const initialDate = buildDateOptions(DATE_OPTIONS_COUNT)[0]?.isoDate ?? ''
 const services = ref<ReservationServiceOption[]>(ReservationService.getFallbackServices())
 const vehicles = ref<Vehicle[]>([])
 const availableSlots = ref<string[]>([])
+const availableSlotPlans = ref<ReservationSchedulePlan[]>([])
 const selectedServiceId = ref<string | null>(null)
 const selectedServiceIds = ref<string[]>([])
 const multiServiceMode = ref(false)
@@ -271,6 +276,7 @@ const selectedVehicleId = ref<string | null>(null)
 const selectedDate = ref<string>(initialDate)
 const selectedTime = ref<string | null>(null)
 const isSubmitting = ref(false)
+let slotRefreshVersion = 0
 
 const selectedService = computed(() => {
   return services.value.find(service => service.id === selectedServiceId.value) ?? null
@@ -368,54 +374,81 @@ async function loadVehicles() {
   }
 }
 
-async function refreshSlots() {
-  if (!selectedDate.value) {
-    availableSlots.value = []
-    selectedTime.value = null
-    return
-  }
-
-  const serviceIds = isEditing.value
+function getSelectedServiceIds() {
+  return isEditing.value
     ? (selectedServiceId.value ? [selectedServiceId.value] : [])
     : (multiServiceMode.value
       ? (selectedServiceIds.value.length > 0
         ? [...selectedServiceIds.value]
         : (selectedServiceId.value ? [selectedServiceId.value] : []))
       : (selectedServiceId.value ? [selectedServiceId.value] : []))
+}
 
-  if (serviceIds.length === 0) {
-    availableSlots.value = []
-    selectedTime.value = null
-    return
-  }
+function clearAvailableSlots() {
+  slotRefreshVersion += 1
+  availableSlotPlans.value = []
+  availableSlots.value = []
+  selectedTime.value = null
+}
 
-  const excludeId = props.reservationToEdit?.id
-
-  const fallbackSlotLists = serviceIds.map(serviceId =>
-    ReservationService.getFallbackAvailableSlots(serviceId, selectedDate.value, excludeId)
-  )
-  availableSlots.value = intersectSlots(fallbackSlotLists)
-
-  const slotLists = await Promise.all(
-    serviceIds.map(serviceId =>
-      ReservationService.getAvailableSlots(serviceId, selectedDate.value, excludeId)
-    )
-  )
-  availableSlots.value = intersectSlots(slotLists)
+function applySchedulePlans(plans: ReservationSchedulePlan[]) {
+  availableSlotPlans.value = plans
+  availableSlots.value = plans.map(plan => plan.startTime)
 
   if (!availableSlots.value.includes(selectedTime.value ?? '')) {
     selectedTime.value = null
   }
 }
 
-function intersectSlots(slotLists: string[][]) {
-  if (slotLists.length === 0) {
-    return []
+async function refreshSlots() {
+  const refreshVersion = ++slotRefreshVersion
+
+  if (!selectedDate.value) {
+    applySchedulePlans([])
+    return
   }
 
-  return slotLists.reduce<string[]>((commonSlots, currentSlots) => {
-    return commonSlots.filter(slot => currentSlots.includes(slot))
-  }, [...slotLists[0]])
+  const serviceIds = getSelectedServiceIds()
+
+  if (serviceIds.length === 0) {
+    applySchedulePlans([])
+    return
+  }
+
+  const excludeId = props.reservationToEdit?.id
+
+  const fallbackSlotsByServiceId = Object.fromEntries(
+    serviceIds.map(serviceId => [
+      serviceId,
+      ReservationService.getFallbackAvailableSlots(serviceId, selectedDate.value, excludeId)
+    ])
+  ) as Record<string, string[]>
+
+  if (refreshVersion !== slotRefreshVersion) {
+    return
+  }
+
+  applySchedulePlans(
+    buildReservationSchedulePlans(serviceIds, services.value, fallbackSlotsByServiceId)
+  )
+
+  const slotLists = await Promise.all(
+    serviceIds.map(serviceId =>
+      ReservationService.getAvailableSlots(serviceId, selectedDate.value, excludeId)
+    )
+  )
+
+  if (refreshVersion !== slotRefreshVersion) {
+    return
+  }
+
+  const slotsByServiceId = Object.fromEntries(
+    serviceIds.map((serviceId, index) => [serviceId, slotLists[index] ?? []])
+  ) as Record<string, string[]>
+
+  applySchedulePlans(
+    buildReservationSchedulePlans(serviceIds, services.value, slotsByServiceId)
+  )
 }
 
 function initializeSelectionFromProps() {
@@ -430,7 +463,7 @@ function initializeSelectionFromProps() {
   selectedTime.value = props.reservationToEdit.time
 }
 
-function toggleMultiServiceMode() {
+async function toggleMultiServiceMode() {
   if (isEditing.value) {
     return
   }
@@ -440,6 +473,13 @@ function toggleMultiServiceMode() {
   if (!multiServiceMode.value) {
     selectedServiceIds.value = []
   }
+
+  if (selectedServiceId.value) {
+    await refreshSlots()
+    return
+  }
+
+  clearAvailableSlots()
 }
 
 function syncDateOptions() {
@@ -477,8 +517,7 @@ async function selectService(serviceId: string) {
     if (selectedServiceId.value) {
       await refreshSlots()
     } else {
-      availableSlots.value = []
-      selectedTime.value = null
+      clearAvailableSlots()
     }
 
     return
@@ -526,11 +565,7 @@ async function createReservation() {
   try {
     isSubmitting.value = true
 
-    const serviceIdsToBook = multiServiceMode.value
-      ? (selectedServiceIds.value.length > 0
-        ? selectedServiceIds.value
-        : (selectedServiceId.value ? [selectedServiceId.value] : []))
-      : (selectedServiceId.value ? [selectedServiceId.value] : [])
+    const serviceIdsToBook = getSelectedServiceIds()
 
     if (serviceIdsToBook.length === 0) {
       throw new Error('Aucun service selectionne.')
@@ -540,13 +575,32 @@ async function createReservation() {
       .map(serviceId => services.value.find(service => service.id === serviceId))
       .filter((service): service is ReservationServiceOption => Boolean(service))
 
+    const selectedPlan = availableSlotPlans.value.find(plan => plan.startTime === selectedTime.value)
+    const reservationEntries = selectedPlan?.entries ?? selectedServices.map(service => ({
+      serviceId: service.id,
+      time: selectedTime.value as string,
+      durationMinutes: service.durationMinutes
+    }))
+    const reservationTimesByServiceId = new Map(
+      reservationEntries.map(entry => [entry.serviceId, entry.time])
+    )
+
+    if (reservationTimesByServiceId.size !== selectedServices.length) {
+      throw new Error('Les creneaux multi-services ont change. Reessayez.')
+    }
+
     for (const service of selectedServices) {
+      const scheduledTime = reservationTimesByServiceId.get(service.id)
+      if (!scheduledTime) {
+        throw new Error(`Impossible de planifier le service ${service.label}.`)
+      }
+
       await ReservationService.createReservation({
         serviceId: service.id,
         serviceLabel: service.label,
         vehicleId: selectedVehicleId.value ?? undefined,
         date: selectedDate.value,
-        time: selectedTime.value as string
+        time: scheduledTime
       })
     }
 
@@ -563,6 +617,7 @@ async function createReservation() {
     selectedServiceId.value = null
     selectedServiceIds.value = []
     selectedTime.value = null
+    availableSlotPlans.value = []
     availableSlots.value = []
   } catch (error) {
     console.error('Reservation failed:', error)
