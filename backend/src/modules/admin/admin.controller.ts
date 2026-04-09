@@ -45,6 +45,7 @@ type AdminUserPayload = {
   email: string;
   phone: string | null;
   role: Role;
+  active: boolean;
   vehicleCount: number;
   reservationCount: number;
   reviewCount: number;
@@ -118,6 +119,14 @@ function normalizePositiveAmount(value: unknown) {
   }
 
   return Number(normalized.toFixed(2));
+}
+
+function normalizeUserActiveFlag(value: unknown) {
+  if (typeof value !== 'boolean') {
+    throw new AppError('Le statut actif doit etre un booleen.', 400);
+  }
+
+  return value;
 }
 
 function normalizeSlotTimes(value: unknown) {
@@ -241,6 +250,51 @@ function normalizeTutorialDifficulty(value: unknown): TutorialDifficulty {
 
 function buildPublicAssetUrl(req: Request, relativePath: string) {
   return `${req.protocol}://${req.get('host')}${relativePath}`;
+}
+
+const adminUserSelect = {
+  id: true,
+  fullName: true,
+  email: true,
+  phone: true,
+  role: true,
+  active: true,
+  createdAt: true,
+  _count: {
+    select: {
+      vehicles: true,
+      reservations: true,
+      reviews: true
+    }
+  }
+} as const;
+
+function mapAdminUser(user: {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  role: Role;
+  active: boolean;
+  createdAt: Date;
+  _count: {
+    vehicles: number;
+    reservations: number;
+    reviews: number;
+  };
+}) {
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    active: user.active,
+    vehicleCount: user._count.vehicles,
+    reservationCount: user._count.reservations,
+    reviewCount: user._count.reviews,
+    createdAt: toIso(user.createdAt)
+  } satisfies AdminUserPayload;
 }
 
 function mapAdminTutorial(tutorial: {
@@ -428,34 +482,10 @@ async function buildAdminUsers() {
   const users = await prisma.user.findMany({
     orderBy: { createdAt: 'desc' },
     take: 50,
-    select: {
-      id: true,
-      fullName: true,
-      email: true,
-      phone: true,
-      role: true,
-      createdAt: true,
-      _count: {
-        select: {
-          vehicles: true,
-          reservations: true,
-          reviews: true
-        }
-      }
-    }
+    select: adminUserSelect
   });
 
-  return users.map(user => ({
-    id: user.id,
-    fullName: user.fullName,
-    email: user.email,
-    phone: user.phone,
-    role: user.role,
-    vehicleCount: user._count.vehicles,
-    reservationCount: user._count.reservations,
-    reviewCount: user._count.reviews,
-    createdAt: toIso(user.createdAt)
-  })) satisfies AdminUserPayload[];
+  return users.map(mapAdminUser) satisfies AdminUserPayload[];
 }
 
 async function buildAdminReservations() {
@@ -542,6 +572,64 @@ export async function getAdminSummary(_req: Request, res: Response) {
 export async function listAdminUsers(_req: Request, res: Response) {
   try {
     res.json(await buildAdminUsers());
+  } catch (error) {
+    return toAdminErrorResponse(res, error);
+  }
+}
+
+export async function updateAdminUserActivation(req: Request, res: Response) {
+  try {
+    const userId = normalizeTrimmedString(req.params.userId);
+    if (!userId) {
+      throw new AppError('Utilisateur introuvable.', 404);
+    }
+
+    const nextActive = normalizeUserActiveFlag((req.body as Record<string, unknown> | null)?.active);
+    const actorUserId = normalizeTrimmedString(String(res.locals.authUser?.id ?? ''));
+
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: adminUserSelect
+    });
+
+    if (!existing) {
+      throw new AppError('Utilisateur introuvable.', 404);
+    }
+
+    if (!nextActive && existing.id === actorUserId) {
+      throw new AppError('Vous ne pouvez pas desactiver votre propre compte.', 400);
+    }
+
+    if (!nextActive && existing.active && existing.role === Role.ADMIN) {
+      const remainingActiveAdmins = await prisma.user.count({
+        where: {
+          role: Role.ADMIN,
+          active: true,
+          id: {
+            not: existing.id
+          }
+        }
+      });
+
+      if (remainingActiveAdmins === 0) {
+        throw new AppError('Impossible de desactiver le dernier administrateur actif.', 400);
+      }
+    }
+
+    if (existing.active === nextActive) {
+      res.json(mapAdminUser(existing));
+      return;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        active: nextActive
+      },
+      select: adminUserSelect
+    });
+
+    res.json(mapAdminUser(updated));
   } catch (error) {
     return toAdminErrorResponse(res, error);
   }
@@ -682,6 +770,7 @@ export const __adminControllerInternals = {
   normalizeOptionalTrimmedString,
   normalizePositiveInteger,
   normalizePositiveAmount,
+  normalizeUserActiveFlag,
   normalizeSlotTimes,
   normalizeStringList,
   slugifyService,

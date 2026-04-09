@@ -232,6 +232,7 @@ async function registerUser() {
   assert.ok(payload?.refreshToken);
 
   return {
+    userId: payload!.user.id,
     email,
     password,
     accessToken: payload!.accessToken,
@@ -634,6 +635,102 @@ runIntegrationTest('auth endpoints reject invalid credentials and duplicate acco
   });
   assert.equal(invalidResetPasswordResult.response.status, 401);
   assert.match(invalidResetPasswordResult.payload?.message ?? '', /jeton/i);
+});
+
+runIntegrationTest('admin can deactivate and reactivate accounts and disabled users lose access', async () => {
+  const userSession = await registerUser();
+  const adminSession = await createAdminSession();
+
+  const initialUsersResult = await apiRequest<Array<{ id: string; email: string; active: boolean }>>('/api/admin/users', {
+    token: adminSession.accessToken
+  });
+  assert.equal(initialUsersResult.response.status, 200);
+  assert.ok(initialUsersResult.payload?.some(user => user.id === userSession.userId && user.active === true));
+
+  const deactivateResult = await apiRequest<{ id: string; active: boolean }>(
+    `/api/admin/users/${userSession.userId}/activation`,
+    {
+      method: 'PATCH',
+      token: adminSession.accessToken,
+      body: {
+        active: false
+      }
+    }
+  );
+  assert.equal(deactivateResult.response.status, 200);
+  assert.equal(deactivateResult.payload?.id, userSession.userId);
+  assert.equal(deactivateResult.payload?.active, false);
+
+  const disabledVehiclesResult = await apiRequest<{ message: string }>('/api/vehicles', {
+    token: userSession.accessToken
+  });
+  assert.equal(disabledVehiclesResult.response.status, 403);
+  assert.match(disabledVehiclesResult.payload?.message ?? '', /desactive/i);
+
+  const disabledRefreshResult = await apiRequest<{ message: string }>('/api/auth/refresh', {
+    method: 'POST',
+    body: {
+      refreshToken: userSession.refreshToken
+    }
+  });
+  assert.equal(disabledRefreshResult.response.status, 403);
+  assert.match(disabledRefreshResult.payload?.message ?? '', /desactive/i);
+
+  const disabledLoginResult = await apiRequest<{ message: string }>('/api/auth/login', {
+    method: 'POST',
+    body: {
+      email: userSession.email,
+      password: userSession.password
+    }
+  });
+  assert.equal(disabledLoginResult.response.status, 403);
+  assert.match(disabledLoginResult.payload?.message ?? '', /desactive/i);
+
+  const selfDeactivateResult = await apiRequest<{ message: string }>(
+    `/api/admin/users/${adminSession.userId}/activation`,
+    {
+      method: 'PATCH',
+      token: adminSession.accessToken,
+      body: {
+        active: false
+      }
+    }
+  );
+  assert.equal(selfDeactivateResult.response.status, 400);
+  assert.match(selfDeactivateResult.payload?.message ?? '', /propre compte|dernier administrateur/i);
+
+  const reactivateResult = await apiRequest<{ id: string; active: boolean }>(
+    `/api/admin/users/${userSession.userId}/activation`,
+    {
+      method: 'PATCH',
+      token: adminSession.accessToken,
+      body: {
+        active: true
+      }
+    }
+  );
+  assert.equal(reactivateResult.response.status, 200);
+  assert.equal(reactivateResult.payload?.active, true);
+
+  const reactivatedLoginResult = await apiRequest<{
+    accessToken: string;
+    refreshToken: string;
+    user: { id: string; email: string };
+  }>('/api/auth/login', {
+    method: 'POST',
+    body: {
+      email: userSession.email,
+      password: userSession.password
+    }
+  });
+  assert.equal(reactivatedLoginResult.response.status, 200);
+  assert.equal(reactivatedLoginResult.payload?.user.id, userSession.userId);
+
+  const updatedUsersResult = await apiRequest<Array<{ id: string; email: string; active: boolean }>>('/api/admin/users', {
+    token: adminSession.accessToken
+  });
+  assert.equal(updatedUsersResult.response.status, 200);
+  assert.ok(updatedUsersResult.payload?.some(user => user.id === userSession.userId && user.active === true));
 });
 
 runIntegrationTest('admin web and admin APIs are protected and allow service and tutorial management', async () => {

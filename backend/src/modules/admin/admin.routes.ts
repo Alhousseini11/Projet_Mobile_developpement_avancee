@@ -11,6 +11,7 @@ router.use(authGuard, roleGuard([Role.ADMIN]));
 
 router.get('/summary', controller.getAdminSummary);
 router.get('/users', controller.listAdminUsers);
+router.patch('/users/:userId/activation', controller.updateAdminUserActivation);
 router.get('/reservations', controller.listAdminReservations);
 router.get('/services', controller.listAdminServices);
 router.post('/services', controller.createAdminService);

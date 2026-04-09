@@ -124,6 +124,7 @@ function renderDashboard() {
     selectedServiceId,
     selectedTutorialId,
     serviceEditorMode,
+    sessionUserId: session.user.id,
     sessionName: session.user.fullName,
     sessionEmail: session.user.email
   });
@@ -294,6 +295,29 @@ async function handleTutorialSubmit(event: SubmitEvent) {
   }
 }
 
+async function handleUserActivationToggle(userId: string, nextActive: boolean, userName: string) {
+  const actionLabel = nextActive ? 'reactiver' : 'desactiver';
+  const confirmed = window.confirm(`Confirmer l action "${actionLabel}" pour ${userName} ?`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await apiRequest<AdminUser>(`/api/admin/users/${userId}/activation`, {
+      method: 'PATCH',
+      body: {
+        active: nextActive
+      }
+    });
+
+    currentView = 'users';
+    await refreshDashboard(`Compte ${nextActive ? 'reactive' : 'desactive'} avec succes.`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Mise a jour du compte impossible.';
+    setBanner(getDashboardBanner(), message, 'error');
+  }
+}
+
 function handleLogout() {
   saveSession(null);
   dashboardData = null;
@@ -341,6 +365,17 @@ function bindDashboardListeners() {
     button.addEventListener('click', () => {
       selectedTutorialId = button.dataset.tutorialId ?? null;
       renderDashboard();
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-user-toggle]').forEach(button => {
+    button.addEventListener('click', () => {
+      const userId = button.dataset.userToggle;
+      const nextActive = button.dataset.userNextActive === 'true';
+      const userName = button.dataset.userName ?? 'ce compte';
+      if (userId) {
+        void handleUserActivationToggle(userId, nextActive, userName);
+      }
     });
   });
 

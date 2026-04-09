@@ -87,6 +87,7 @@ model User {
   fullName             String
   phone                String?
   role                 Role            @default(USER)
+  active               Boolean         @default(true)
   photoUrl             String?
   vehicles             Vehicle[]
   reservations         Reservation[]

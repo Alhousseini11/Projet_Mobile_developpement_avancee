@@ -40,6 +40,15 @@ test('normalizePositiveAmount rejects invalid service price input', () => {
   );
 });
 
+test('normalizeUserActiveFlag accepts booleans and rejects other values', () => {
+  assert.equal(__adminControllerInternals.normalizeUserActiveFlag(true), true);
+  assert.equal(__adminControllerInternals.normalizeUserActiveFlag(false), false);
+  assert.throws(
+    () => __adminControllerInternals.normalizeUserActiveFlag('false'),
+    /statut actif doit etre un booleen/i
+  );
+});
+
 test('normalizeTutorialCategory and difficulty map known admin values', () => {
   assert.equal(__adminControllerInternals.normalizeTutorialCategory('freins'), 'freins');
   assert.equal(__adminControllerInternals.normalizeTutorialCategory('inconnu'), 'entretien');

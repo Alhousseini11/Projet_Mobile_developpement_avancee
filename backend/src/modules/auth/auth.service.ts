@@ -182,6 +182,12 @@ function serializeUser(user: AuthenticatedUser) {
   };
 }
 
+function assertUserIsActive(user: Pick<User, 'active'>) {
+  if (!user.active) {
+    throw new AppError('Ce compte a ete desactive. Contactez un administrateur.', 403);
+  }
+}
+
 function toAuthenticatedUser(user: User): AuthenticatedUser {
   return {
     id: user.id,
@@ -289,6 +295,7 @@ export async function loginUser(payload: { email: string; password: string }) {
     throw new AppError('Email ou mot de passe invalide.', 401);
   }
 
+  assertUserIsActive(user);
   return createSession(toAuthenticatedUser(user));
 }
 
@@ -303,6 +310,7 @@ export async function refreshAuthSession(refreshToken: string) {
     throw new AppError('Session introuvable.', 401);
   }
 
+  assertUserIsActive(user);
   return createSession(toAuthenticatedUser(user));
 }
 
@@ -316,6 +324,14 @@ export async function requestPasswordReset(emailInput: string): Promise<ForgotPa
   });
 
   if (!user) {
+    return {
+      message: shouldSendEmail
+        ? 'Si un compte existe, un email de reinitialisation a ete envoye.'
+        : 'Si un compte existe, un lien de reinitialisation a ete prepare.'
+    };
+  }
+
+  if (!user.active) {
     return {
       message: shouldSendEmail
         ? 'Si un compte existe, un email de reinitialisation a ete envoye.'
@@ -377,6 +393,7 @@ async function resetPasswordWithTokenValue(token: string) {
     throw new AppError('Compte introuvable pour ce jeton.', 404);
   }
 
+  assertUserIsActive(user);
   return user;
 }
 
@@ -408,6 +425,7 @@ async function resetPasswordWithCodeValue(emailInput: string, codeInput: string)
     throw new AppError('Code de reinitialisation invalide ou expire.', 401);
   }
 
+  assertUserIsActive(user);
   return user;
 }
 
@@ -465,6 +483,7 @@ export async function resolveUserFromAccessToken(accessToken: string) {
     throw new AppError('Session invalide.', 401);
   }
 
+  assertUserIsActive(user);
   return toAuthenticatedUser(user);
 }
 
