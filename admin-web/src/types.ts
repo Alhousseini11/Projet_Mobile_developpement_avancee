@@ -77,6 +77,16 @@ export type AdminReservation = {
   notes: string | null;
 };
 
+export type AdminReview = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  serviceLabel: string;
+  customerName: string;
+  customerEmail: string;
+  createdAt: string;
+};
+
 export type AdminService = {
   id: string;
   slug: string;
@@ -115,6 +125,7 @@ export type DashboardData = {
   summary: AdminSummary;
   users: AdminUser[];
   reservations: AdminReservation[];
+  reviews: AdminReview[];
   services: AdminService[];
   tutorials: TutorialItem[];
 };

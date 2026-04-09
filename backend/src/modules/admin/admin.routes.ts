@@ -13,6 +13,8 @@ router.get('/summary', controller.getAdminSummary);
 router.get('/users', controller.listAdminUsers);
 router.patch('/users/:userId/activation', controller.updateAdminUserActivation);
 router.get('/reservations', controller.listAdminReservations);
+router.get('/reviews', controller.listAdminReviews);
+router.delete('/reviews/:reviewId', controller.deleteAdminReview);
 router.get('/services', controller.listAdminServices);
 router.post('/services', controller.createAdminService);
 router.put('/services/:serviceId', controller.updateAdminService);

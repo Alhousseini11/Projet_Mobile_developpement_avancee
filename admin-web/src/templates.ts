@@ -1,5 +1,5 @@
 import { DEFAULT_THUMBNAIL, escapeHtml, formatCurrency, formatDate, formatDateTime } from './helpers';
-import type { AdminService, AdminSummary, DashboardData, TutorialItem, ViewKey } from './types';
+import type { AdminReview, AdminService, AdminSummary, DashboardData, TutorialItem, ViewKey } from './types';
 
 type ServiceEditorMode = 'create' | 'edit';
 
@@ -18,7 +18,7 @@ const VIEW_DESCRIPTIONS: Record<ViewKey, string> = {
   tutorials: 'Bibliotheque video destinee aux clients, avec upload direct des fichiers depuis le poste administrateur.',
   users: 'Gestion des comptes clients et equipe avec activation ou desactivation des acces.',
   reservations: 'Suivi des rendez-vous, des statuts et des montants associes.',
-  reviews: 'Lecture des retours clients recents pour suivre la qualite de service.'
+  reviews: 'Moderation des avis clients avec suppression des contenus malsains ou abusifs.'
 };
 
 export function renderAppShell(apiUrl: string) {
@@ -155,6 +155,40 @@ function renderDashboardSection(summary: AdminSummary) {
 
 function renderStatusBadge(label: string, variant: 'active' | 'inactive' | 'neutral' = 'neutral') {
   return `<span class="status-badge ${variant}">${escapeHtml(label)}</span>`;
+}
+
+function renderAdminReviewCards(reviews: AdminReview[]) {
+  if (reviews.length === 0) {
+    return '<p class="empty-state">Aucun avis recent.</p>';
+  }
+
+  return reviews
+    .map(
+      review => `
+        <article class="stack-card review-card">
+          <div class="review-card-header">
+            <div>
+              <strong>${escapeHtml(review.customerName)}</strong>
+              <p class="muted-text">${escapeHtml(review.customerEmail)}</p>
+            </div>
+            <div class="review-card-actions">
+              ${renderStatusBadge(`${review.rating}/5`)}
+              <button
+                type="button"
+                class="button-danger button-small"
+                data-review-delete="${escapeHtml(review.id)}"
+                data-review-customer="${escapeHtml(review.customerName)}"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+          <p class="muted-text">${escapeHtml(review.serviceLabel)} - ${escapeHtml(formatDateTime(review.createdAt))}</p>
+          <p>${escapeHtml(review.comment || 'Sans commentaire.')}</p>
+        </article>
+      `
+    )
+    .join('');
 }
 
 function renderServiceCards(services: AdminService[], selectedService: AdminService | null) {
@@ -586,28 +620,19 @@ function renderReservationsSection(data: DashboardData) {
   `;
 }
 
-function renderReviewsSection(summary: AdminSummary) {
+function renderReviewsSection(data: DashboardData) {
   return `
     <section class="content-grid single-column">
       <article class="panel">
         <div class="panel-heading">
           <div>
             <p class="section-kicker">Qualite</p>
-            <h3>Derniers avis</h3>
-            <p>Lecture des derniers commentaires pour identifier rapidement les irritants ou les succes.</p>
+            <h3>Moderation des avis</h3>
+            <p>${data.summary.metrics.totalReviews} avis au total. Supprime les commentaires malsains, injurieux ou hors sujet.</p>
           </div>
         </div>
         <div class="stack-list">
-          ${renderQuickList(
-            summary.recentReviews,
-            'Aucun avis recent.',
-            review => `
-              <strong>${escapeHtml(review.customerName)}</strong>
-              <p class="muted-text">${escapeHtml(review.serviceLabel)} - ${review.rating}/5</p>
-              <p>${escapeHtml(review.comment || 'Sans commentaire.')}</p>
-              <p class="muted-text">${escapeHtml(formatDateTime(review.createdAt))}</p>
-            `
-          )}
+          ${renderAdminReviewCards(data.reviews)}
         </div>
       </article>
     </section>
@@ -632,7 +657,7 @@ function renderActiveSection(
     case 'reservations':
       return renderReservationsSection(data);
     case 'reviews':
-      return renderReviewsSection(data.summary);
+      return renderReviewsSection(data);
     case 'dashboard':
     default:
       return renderDashboardSection(data.summary);

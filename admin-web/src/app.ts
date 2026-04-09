@@ -2,6 +2,7 @@ import { API_URL, apiMultipartRequest, apiRequest, getSession, saveSession } fro
 import { DEFAULT_THUMBNAIL, splitStringList } from './helpers';
 import { renderAppShell, renderDashboardPage } from './templates';
 import type {
+  AdminReview,
   AdminService,
   AdminSummary,
   AdminUser,
@@ -92,10 +93,11 @@ function getDashboardBanner() {
 }
 
 async function loadDashboardData() {
-  const [summary, users, reservations, services, tutorials] = await Promise.all([
+  const [summary, users, reservations, reviews, services, tutorials] = await Promise.all([
     apiRequest<AdminSummary>('/api/admin/summary'),
     apiRequest<AdminUser[]>('/api/admin/users'),
     apiRequest<AdminReservation[]>('/api/admin/reservations'),
+    apiRequest<AdminReview[]>('/api/admin/reviews'),
     apiRequest<AdminService[]>('/api/admin/services'),
     apiRequest<TutorialItem[]>('/api/admin/tutorials')
   ]);
@@ -104,6 +106,7 @@ async function loadDashboardData() {
     summary,
     users,
     reservations,
+    reviews,
     services,
     tutorials
   };
@@ -318,6 +321,25 @@ async function handleUserActivationToggle(userId: string, nextActive: boolean, u
   }
 }
 
+async function handleDeleteReview(reviewId: string, customerName: string) {
+  const confirmed = window.confirm(`Supprimer definitivement l avis de ${customerName} ?`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await apiRequest<null>(`/api/admin/reviews/${reviewId}`, {
+      method: 'DELETE'
+    });
+
+    currentView = 'reviews';
+    await refreshDashboard('Avis supprime avec succes.');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Suppression de l avis impossible.';
+    setBanner(getDashboardBanner(), message, 'error');
+  }
+}
+
 function handleLogout() {
   saveSession(null);
   dashboardData = null;
@@ -375,6 +397,16 @@ function bindDashboardListeners() {
       const userName = button.dataset.userName ?? 'ce compte';
       if (userId) {
         void handleUserActivationToggle(userId, nextActive, userName);
+      }
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('[data-review-delete]').forEach(button => {
+    button.addEventListener('click', () => {
+      const reviewId = button.dataset.reviewDelete;
+      const customerName = button.dataset.reviewCustomer ?? 'ce client';
+      if (reviewId) {
+        void handleDeleteReview(reviewId, customerName);
       }
     });
   });
