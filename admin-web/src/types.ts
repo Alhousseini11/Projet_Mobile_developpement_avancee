@@ -55,6 +55,7 @@ export type AdminUser = {
   email: string;
   phone: string | null;
   role: string;
+  active: boolean;
   vehicleCount: number;
   reservationCount: number;
   reviewCount: number;

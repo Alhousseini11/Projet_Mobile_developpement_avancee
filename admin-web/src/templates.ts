@@ -16,7 +16,7 @@ const VIEW_DESCRIPTIONS: Record<ViewKey, string> = {
   dashboard: 'Vue de synthese du garage avec les chiffres du jour et les actions prioritaires.',
   services: 'Catalogue des prestations, edition detaillee et archivage des services visibles pour la reservation.',
   tutorials: 'Bibliotheque video destinee aux clients, avec upload direct des fichiers depuis le poste administrateur.',
-  users: 'Lecture des comptes clients et des roles disponibles sur la plateforme.',
+  users: 'Gestion des comptes clients et equipe avec activation ou desactivation des acces.',
   reservations: 'Suivi des rendez-vous, des statuts et des montants associes.',
   reviews: 'Lecture des retours clients recents pour suivre la qualite de service.'
 };
@@ -485,7 +485,7 @@ function renderTutorialsSection(data: DashboardData, selectedTutorialId: string 
   `;
 }
 
-function renderUsersSection(data: DashboardData) {
+function renderUsersSection(data: DashboardData, sessionUserId: string) {
   return `
     <section class="content-grid single-column">
       <article class="panel">
@@ -493,26 +493,44 @@ function renderUsersSection(data: DashboardData) {
           <div>
             <p class="section-kicker">Clients et equipe</p>
             <h3>Utilisateurs</h3>
-            <p>Lecture seule pour verifier la composition de la base et l'activite par compte.</p>
+            <p>Active ou desactive les comptes selon les besoins d'exploitation du garage.</p>
           </div>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Utilisateur</th><th>Role</th><th>Activite</th><th>Creation</th></tr>
+              <tr><th>Utilisateur</th><th>Role</th><th>Statut</th><th>Activite</th><th>Creation</th><th>Action</th></tr>
             </thead>
             <tbody>
               ${
                 data.users.length === 0
-                  ? '<tr><td colspan="4" class="empty-state">Aucun utilisateur.</td></tr>'
+                  ? '<tr><td colspan="6" class="empty-state">Aucun utilisateur.</td></tr>'
                   : data.users
                       .map(
                         user => `
                           <tr>
                             <td><strong>${escapeHtml(user.fullName)}</strong><p class="muted-text">${escapeHtml(user.email)}</p></td>
                             <td>${escapeHtml(user.role)}</td>
+                            <td>${renderStatusBadge(user.active ? 'Actif' : 'Desactive', user.active ? 'active' : 'inactive')}</td>
                             <td>${user.vehicleCount} vehicules · ${user.reservationCount} reservations · ${user.reviewCount} avis</td>
                             <td>${escapeHtml(formatDate(user.createdAt))}</td>
+                            <td>
+                              ${
+                                user.id === sessionUserId
+                                  ? renderStatusBadge('Session actuelle')
+                                  : `
+                                    <button
+                                      type="button"
+                                      class="${user.active ? 'button-danger' : 'button-secondary'} button-small"
+                                      data-user-toggle="${escapeHtml(user.id)}"
+                                      data-user-next-active="${user.active ? 'false' : 'true'}"
+                                      data-user-name="${escapeHtml(user.fullName)}"
+                                    >
+                                      ${user.active ? 'Desactiver' : 'Reactiver'}
+                                    </button>
+                                  `
+                              }
+                            </td>
                           </tr>
                         `
                       )
@@ -601,7 +619,8 @@ function renderActiveSection(
   currentView: ViewKey,
   selectedServiceId: string | null,
   selectedTutorialId: string | null,
-  serviceEditorMode: ServiceEditorMode
+  serviceEditorMode: ServiceEditorMode,
+  sessionUserId: string
 ) {
   switch (currentView) {
     case 'services':
@@ -609,7 +628,7 @@ function renderActiveSection(
     case 'tutorials':
       return renderTutorialsSection(data, selectedTutorialId);
     case 'users':
-      return renderUsersSection(data);
+      return renderUsersSection(data, sessionUserId);
     case 'reservations':
       return renderReservationsSection(data);
     case 'reviews':
@@ -626,6 +645,7 @@ export function renderDashboardPage(args: {
   selectedServiceId: string | null;
   selectedTutorialId: string | null;
   serviceEditorMode: ServiceEditorMode;
+  sessionUserId: string;
   sessionName: string;
   sessionEmail: string;
 }) {
@@ -635,6 +655,7 @@ export function renderDashboardPage(args: {
     selectedServiceId,
     selectedTutorialId,
     serviceEditorMode,
+    sessionUserId,
     sessionName,
     sessionEmail
   } = args;
@@ -679,6 +700,6 @@ export function renderDashboardPage(args: {
         : ''
     }
 
-    ${renderActiveSection(data, currentView, selectedServiceId, selectedTutorialId, serviceEditorMode)}
+    ${renderActiveSection(data, currentView, selectedServiceId, selectedTutorialId, serviceEditorMode, sessionUserId)}
   `;
 }
