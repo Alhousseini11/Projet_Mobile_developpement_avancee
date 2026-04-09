@@ -67,6 +67,16 @@ type AdminReservationPayload = {
   notes: string | null;
 };
 
+type AdminReviewPayload = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  serviceLabel: string;
+  customerName: string;
+  customerEmail: string;
+  createdAt: string;
+};
+
 type AdminTutorialPayload = {
   id: string;
   title: string;
@@ -531,6 +541,44 @@ async function buildAdminReservations() {
   })) satisfies AdminReservationPayload[];
 }
 
+async function buildAdminReviews() {
+  const reviews = await prisma.review.findMany({
+    orderBy: [{ createdAt: 'desc' }],
+    take: 100,
+    select: {
+      id: true,
+      rating: true,
+      comment: true,
+      createdAt: true,
+      user: {
+        select: {
+          fullName: true,
+          email: true
+        }
+      },
+      reservation: {
+        select: {
+          serviceType: true
+        }
+      }
+    }
+  });
+
+  const serviceMap = await buildReservationServiceMap(
+    reviews.map(review => review.reservation.serviceType)
+  );
+
+  return reviews.map(review => ({
+    id: review.id,
+    rating: review.rating,
+    comment: review.comment,
+    serviceLabel: serviceMap.get(review.reservation.serviceType)?.label ?? review.reservation.serviceType,
+    customerName: review.user.fullName,
+    customerEmail: review.user.email,
+    createdAt: toIso(review.createdAt)
+  })) satisfies AdminReviewPayload[];
+}
+
 async function buildAdminTutorials() {
   const tutorials = await prisma.tutorial.findMany({
     orderBy: [{ createdAt: 'desc' }],
@@ -638,6 +686,40 @@ export async function updateAdminUserActivation(req: Request, res: Response) {
 export async function listAdminReservations(_req: Request, res: Response) {
   try {
     res.json(await buildAdminReservations());
+  } catch (error) {
+    return toAdminErrorResponse(res, error);
+  }
+}
+
+export async function listAdminReviews(_req: Request, res: Response) {
+  try {
+    res.json(await buildAdminReviews());
+  } catch (error) {
+    return toAdminErrorResponse(res, error);
+  }
+}
+
+export async function deleteAdminReview(req: Request, res: Response) {
+  try {
+    const reviewId = normalizeTrimmedString(req.params.reviewId);
+    if (!reviewId) {
+      throw new AppError('Avis introuvable.', 404);
+    }
+
+    const existing = await prisma.review.findUnique({
+      where: { id: reviewId },
+      select: { id: true }
+    });
+
+    if (!existing) {
+      throw new AppError('Avis introuvable.', 404);
+    }
+
+    await prisma.review.delete({
+      where: { id: reviewId }
+    });
+
+    res.status(204).end();
   } catch (error) {
     return toAdminErrorResponse(res, error);
   }

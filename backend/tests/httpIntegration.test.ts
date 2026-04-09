@@ -927,6 +927,147 @@ runIntegrationTest('admin web and admin APIs are protected and allow service and
   );
 });
 
+runIntegrationTest('admin can list and delete harmful reviews through admin API', async () => {
+  const userSession = await registerUser();
+  const adminSession = await createAdminSession();
+
+  const createVehicleResult = await createVehicle(userSession.accessToken, {
+    licensePlate: 'REVIEW-101'
+  });
+  assert.equal(createVehicleResult.response.status, 201);
+
+  const createReservationResult = await apiRequest<{
+    id: string;
+    serviceId: string;
+    serviceLabel: string;
+    status: string;
+  }>('/api/reservations', {
+    method: 'POST',
+    token: userSession.accessToken,
+    body: {
+      serviceId: 'oil-change',
+      vehicleId: createVehicleResult.payload?.id,
+      date: '2026-05-02',
+      time: '10:00',
+      notes: 'Reservation pour moderation admin'
+    }
+  });
+  assert.equal(createReservationResult.response.status, 201);
+
+  const reviewCreateResult = await apiRequest<{
+    id: string;
+    reservationId: string;
+    rating: number;
+    comment: string | null;
+  }>('/api/reviews', {
+    method: 'POST',
+    token: userSession.accessToken,
+    body: {
+      reservationId: createReservationResult.payload?.id,
+      rating: 1,
+      comment: 'Avis malsain de test a supprimer.'
+    }
+  });
+  assert.equal(reviewCreateResult.response.status, 201);
+  assert.ok(reviewCreateResult.payload?.id);
+
+  const forbiddenReviewsResult = await apiRequest<{ message: string }>('/api/admin/reviews', {
+    token: userSession.accessToken
+  });
+  assert.equal(forbiddenReviewsResult.response.status, 403);
+  assert.match(forbiddenReviewsResult.payload?.message ?? '', /Acces refuse/i);
+
+  const adminReviewsResult = await apiRequest<
+    Array<{ id: string; customerEmail: string; comment: string | null }>
+  >('/api/admin/reviews', {
+    token: adminSession.accessToken
+  });
+  assert.equal(adminReviewsResult.response.status, 200);
+  assert.ok(
+    adminReviewsResult.payload?.some(
+      review =>
+        review.id === reviewCreateResult.payload?.id &&
+        review.customerEmail === userSession.email &&
+        review.comment === 'Avis malsain de test a supprimer.'
+    )
+  );
+
+  const summaryBeforeDeleteResult = await apiRequest<{
+    metrics: { totalReviews: number };
+    recentReviews: Array<{ id: string }>;
+  }>('/api/admin/summary', {
+    token: adminSession.accessToken
+  });
+  assert.equal(summaryBeforeDeleteResult.response.status, 200);
+  assert.ok(
+    summaryBeforeDeleteResult.payload?.recentReviews.some(
+      review => review.id === reviewCreateResult.payload?.id
+    )
+  );
+
+  const totalReviewsBeforeDelete = summaryBeforeDeleteResult.payload?.metrics.totalReviews ?? 0;
+
+  const forbiddenDeleteResult = await apiRequest<{ message: string }>(
+    `/api/admin/reviews/${reviewCreateResult.payload?.id}`,
+    {
+      method: 'DELETE',
+      token: userSession.accessToken
+    }
+  );
+  assert.equal(forbiddenDeleteResult.response.status, 403);
+  assert.match(forbiddenDeleteResult.payload?.message ?? '', /Acces refuse/i);
+
+  const deleteReviewResult = await rawRequest(
+    `/api/admin/reviews/${reviewCreateResult.payload?.id}`,
+    {
+      method: 'DELETE',
+      token: adminSession.accessToken
+    }
+  );
+  assert.equal(deleteReviewResult.response.status, 204);
+  assert.equal(deleteReviewResult.body.length, 0);
+
+  const adminReviewsAfterDeleteResult = await apiRequest<Array<{ id: string }>>(
+    '/api/admin/reviews',
+    {
+      token: adminSession.accessToken
+    }
+  );
+  assert.equal(adminReviewsAfterDeleteResult.response.status, 200);
+  assert.ok(
+    adminReviewsAfterDeleteResult.payload?.every(
+      review => review.id !== reviewCreateResult.payload?.id
+    )
+  );
+
+  const summaryAfterDeleteResult = await apiRequest<{
+    metrics: { totalReviews: number };
+    recentReviews: Array<{ id: string }>;
+  }>('/api/admin/summary', {
+    token: adminSession.accessToken
+  });
+  assert.equal(summaryAfterDeleteResult.response.status, 200);
+  assert.equal(
+    summaryAfterDeleteResult.payload?.metrics.totalReviews,
+    totalReviewsBeforeDelete - 1
+  );
+  assert.ok(
+    summaryAfterDeleteResult.payload?.recentReviews.every(
+      review => review.id !== reviewCreateResult.payload?.id
+    )
+  );
+
+  const userReviewsAfterDeleteResult = await apiRequest<Array<{ id: string }>>('/api/reviews', {
+    token: userSession.accessToken
+  });
+  assert.equal(userReviewsAfterDeleteResult.response.status, 200);
+  assert.ok(
+    userReviewsAfterDeleteResult.payload?.every(
+      review => review.id !== reviewCreateResult.payload?.id
+    )
+  );
+});
+
 runIntegrationTest('public profile and billing endpoints expose demo account data', async () => {
   const profileResult = await apiRequest<{
     fullName: string;

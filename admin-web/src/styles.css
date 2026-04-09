@@ -487,6 +487,23 @@ a {
   border: 1px solid #e2e8f0;
 }
 
+.review-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.review-card-header,
+.review-card-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.review-card-actions {
+  flex-wrap: wrap;
+}
+
 .stack-card p,
 .table-wrap p {
   margin: 0.35rem 0 0;
@@ -588,7 +605,9 @@ th {
   }
 
   .dashboard-toolbar,
-  .panel-heading {
+  .panel-heading,
+  .review-card-header,
+  .review-card-actions {
     flex-direction: column;
   }
 
