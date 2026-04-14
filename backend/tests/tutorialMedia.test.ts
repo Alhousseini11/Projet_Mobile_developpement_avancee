@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import type { Request } from 'express';
 import {
   __tutorialMediaInternals,
@@ -81,7 +82,7 @@ test('tutorial media helpers resolve managed upload paths and compare managed UR
 
   assert.equal(
     resolvedAbsolutePath,
-    `${__tutorialMediaInternals.tutorialUploadsDir}\\video-test.mp4`
+    path.resolve(__tutorialMediaInternals.tutorialUploadsDir, 'video-test.mp4')
   );
 
   assert.equal(
