@@ -7,6 +7,7 @@ import * as controller from './tutorials.controller';
 const router = Router();
 
 router.get('/', controller.listTutorials);
+router.get('/search', controller.searchTutorials);
 router.get('/popular', controller.getPopularTutorials);
 router.get('/top-rated', controller.getTopRatedTutorials);
 router.get('/category/:category', controller.getTutorialsByCategory);

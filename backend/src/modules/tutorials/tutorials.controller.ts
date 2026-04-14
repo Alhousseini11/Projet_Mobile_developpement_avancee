@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
@@ -48,6 +49,18 @@ interface LegacyTutorialRow {
   thumbnail: string | null;
   durationSec: number | null;
   createdAt: Date | string | null;
+}
+
+interface TutorialWritePayload {
+  title: string;
+  description: string;
+  category: TutorialCategory;
+  difficulty: TutorialDifficulty;
+  duration: number;
+  thumbnail: string;
+  videoUrl: string;
+  instructions: string[];
+  tools: string[];
 }
 
 const FALLBACK_TUTORIALS: TutorialResponse[] = [
@@ -170,6 +183,129 @@ function normalizeTutorialRating(value: unknown) {
   }
 
   return normalized;
+}
+
+function normalizeRequiredText(value: unknown, fieldName: string) {
+  if (typeof value !== 'string') {
+    throw new AppError(`${fieldName} est requis.`, 400);
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new AppError(`${fieldName} est requis.`, 400);
+  }
+
+  return trimmed;
+}
+
+function normalizePositiveInteger(value: unknown, fieldName: string) {
+  const normalized = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
+
+  if (!Number.isInteger(normalized) || normalized <= 0) {
+    throw new AppError(`${fieldName} doit etre un entier positif.`, 400);
+  }
+
+  return normalized;
+}
+
+function normalizeTutorialCategoryInput(value: unknown): TutorialCategory {
+  const normalized = String(value ?? '').trim().toLowerCase();
+
+  switch (normalized) {
+    case 'entretien':
+    case 'maintenance':
+      return 'entretien';
+    case 'freins':
+      return 'freins';
+    case 'suspension':
+      return 'suspension';
+    case 'batterie':
+    case 'battery':
+      return 'batterie';
+    case 'diagnostic':
+      return 'diagnostic';
+    case 'eclairage':
+    case 'lighting':
+      return 'eclairage';
+    case 'fluide':
+    case 'fluid':
+      return 'fluide';
+    case 'mecanique':
+    case 'mechanique':
+    case 'mechanic':
+      return 'mecanique';
+    default:
+      throw new AppError('La categorie du tutoriel est invalide.', 400);
+  }
+}
+
+function normalizeTutorialDifficultyInput(value: unknown): TutorialDifficulty {
+  const normalized = String(value ?? '').trim().toLowerCase();
+
+  switch (normalized) {
+    case 'facile':
+    case 'easy':
+      return 'facile';
+    case 'moyen':
+    case 'medium':
+      return 'moyen';
+    case 'difficile':
+    case 'hard':
+      return 'difficile';
+    default:
+      throw new AppError('La difficulte du tutoriel est invalide.', 400);
+  }
+}
+
+function normalizeStringList(
+  value: unknown,
+  fieldName: string,
+  options: { required?: boolean } = {}
+) {
+  if (!Array.isArray(value)) {
+    if (options.required) {
+      throw new AppError(`${fieldName} est requis.`, 400);
+    }
+
+    return [];
+  }
+
+  const normalized = value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map(entry => entry.trim())
+    .filter(Boolean);
+
+  if (options.required && normalized.length === 0) {
+    throw new AppError(`${fieldName} est requis.`, 400);
+  }
+
+  return normalized;
+}
+
+function normalizeTutorialWritePayload(value: unknown): TutorialWritePayload {
+  const payload = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+
+  return {
+    title: normalizeRequiredText(payload.title, 'Le titre du tutoriel'),
+    description: normalizeRequiredText(payload.description, 'La description du tutoriel'),
+    category: normalizeTutorialCategoryInput(payload.category),
+    difficulty: normalizeTutorialDifficultyInput(payload.difficulty),
+    duration: normalizePositiveInteger(payload.duration, 'La duree'),
+    thumbnail: normalizeRequiredText(payload.thumbnail, 'La miniature du tutoriel'),
+    videoUrl: normalizeRequiredText(payload.videoUrl, 'La video du tutoriel'),
+    instructions: normalizeStringList(payload.instructions, 'Au moins une instruction', { required: true }),
+    tools: normalizeStringList(payload.tools, 'Les outils')
+  };
+}
+
+function isPrismaValidationError(error: unknown): error is Prisma.PrismaClientValidationError {
+  return error instanceof Prisma.PrismaClientValidationError;
+}
+
+function isPrismaRecordNotFoundError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
 }
 
 function shouldCountQualifiedTutorialView(
@@ -329,9 +465,30 @@ export async function listTutorials(_req: Request, res: Response) {
   res.json(await readTutorialCatalog());
 }
 
+export async function searchTutorials(req: Request, res: Response) {
+  const tutorials = await readTutorialCatalog();
+  const query = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+
+  if (!query) {
+    res.json(tutorials);
+    return;
+  }
+
+  res.json(
+    tutorials.filter(tutorial =>
+      tutorial.title.toLowerCase().includes(query) ||
+      tutorial.description.toLowerCase().includes(query) ||
+      tutorial.category.toLowerCase().includes(query) ||
+      tutorial.difficulty.toLowerCase().includes(query) ||
+      tutorial.instructions.some(instruction => instruction.toLowerCase().includes(query)) ||
+      tutorial.tools.some(tool => tool.toLowerCase().includes(query))
+    )
+  );
+}
+
 export async function createTutorial(req: Request, res: Response) {
   try {
-    const data = req.body;
+    const data = normalizeTutorialWritePayload(req.body);
     const tutorial = await prisma.tutorial.create({
       data: {
         title: data.title,
@@ -343,7 +500,7 @@ export async function createTutorial(req: Request, res: Response) {
         videoUrl: data.videoUrl,
         instructions: data.instructions ?? [],
         tools: data.tools ?? [],
-        views: data.views ?? 0,
+        views: 0,
         rating: 0
       }
     });
@@ -354,6 +511,16 @@ export async function createTutorial(req: Request, res: Response) {
       difficulty: String(tutorial.difficulty)
     }));
   } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.status).json({ message: error.message });
+      return;
+    }
+
+    if (isPrismaValidationError(error)) {
+      res.status(400).json({ message: 'Les donnees du tutoriel sont invalides.' });
+      return;
+    }
+
     logger.error({ err: error }, 'Error creating tutorial');
     res.status(503).json({ message: 'Tutorial write operations are not available on this deployment.' });
   }
@@ -374,13 +541,19 @@ export async function getTutorialById(req: Request, res: Response) {
 
 export async function updateTutorial(req: Request, res: Response) {
   const { id } = req.params;
-  const data = req.body;
 
   try {
     const existingTutorial = await prisma.tutorial.findUnique({
       where: { id },
       select: { videoUrl: true }
     });
+
+    if (!existingTutorial) {
+      res.status(404).json({ message: 'Tutorial not found' });
+      return;
+    }
+
+    const data = normalizeTutorialWritePayload(req.body);
 
     const tutorial = await prisma.tutorial.update({
       where: { id },
@@ -417,6 +590,21 @@ export async function updateTutorial(req: Request, res: Response) {
       difficulty: String(tutorial.difficulty)
     }));
   } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.status).json({ message: error.message });
+      return;
+    }
+
+    if (isPrismaValidationError(error)) {
+      res.status(400).json({ message: 'Les donnees du tutoriel sont invalides.' });
+      return;
+    }
+
+    if (isPrismaRecordNotFoundError(error)) {
+      res.status(404).json({ message: 'Tutorial not found' });
+      return;
+    }
+
     logger.error({ err: error, tutorialId: id }, 'Error updating tutorial');
     res.status(503).json({ message: 'Tutorial write operations are not available on this deployment.' });
   }
@@ -430,6 +618,11 @@ export async function deleteTutorial(req: Request, res: Response) {
       where: { id },
       select: { videoUrl: true }
     });
+
+    if (!existingTutorial) {
+      res.status(404).json({ message: 'Tutorial not found' });
+      return;
+    }
 
     await prisma.tutorial.delete({ where: { id } });
 
@@ -446,6 +639,11 @@ export async function deleteTutorial(req: Request, res: Response) {
 
     res.status(204).end();
   } catch (error) {
+    if (isPrismaRecordNotFoundError(error)) {
+      res.status(404).json({ message: 'Tutorial not found' });
+      return;
+    }
+
     logger.error({ err: error, tutorialId: id }, 'Error deleting tutorial');
     res.status(503).json({ message: 'Tutorial delete is not available on this deployment.' });
   }
@@ -618,6 +816,7 @@ export const __tutorialControllerInternals = {
   normalizeDuration,
   normalizeDurationFromSeconds,
   normalizeTutorialRating,
+  normalizeTutorialWritePayload,
   shouldCountQualifiedTutorialView,
   cloneTutorial,
   mapCurrentTutorial,

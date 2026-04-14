@@ -10,6 +10,7 @@ import { readStoredSession } from '@/utils/authStorage'
 import ReservationService from '@/services/ReservationService'
 import type {
   PaymentMethodSummary,
+  ProfileUpdatePayload,
   StripeCheckoutSessionResponse,
   UserProfile
 } from '@/types/profile'
@@ -157,7 +158,7 @@ class ProfileService {
     return request.then(cloneProfile)
   }
 
-  async updateProfile(data: Partial<UserProfile>): Promise<UserProfile> {
+  async updateProfile(data: ProfileUpdatePayload): Promise<UserProfile> {
     const previousKey = getCurrentSessionFallbackKey()
 
     try {

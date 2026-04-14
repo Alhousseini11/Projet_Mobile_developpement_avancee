@@ -32,6 +32,16 @@ interface ProfilePayload {
   notes: string;
 }
 
+interface ProfileUpdatePayload {
+  fullName?: unknown;
+  email?: unknown;
+  phone?: unknown;
+  preferredGarage?: unknown;
+  addressLine?: unknown;
+  city?: unknown;
+  notes?: unknown;
+}
+
 interface PaymentCardPayload {
   brand: string;
   last4: string;
@@ -141,8 +151,16 @@ const defaultInvoices: InvoicePayload[] = [
   }
 ];
 
-function hasOwnProperty(value: object, key: keyof ProfilePayload) {
+function hasOwnProperty(value: object, key: string) {
   return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function normalizeProfileUpdatePayload(value: unknown): ProfileUpdatePayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as ProfileUpdatePayload;
 }
 
 function normalizeOptionalText(value: unknown) {
@@ -655,7 +673,7 @@ export async function getProfile(req: Request, res: Response) {
 }
 
 export async function updateProfile(req: Request, res: Response) {
-  const body = (req.body ?? {}) as Partial<ProfilePayload>;
+  const body = normalizeProfileUpdatePayload(req.body);
   const authenticatedUser = await resolveProfileUser(req);
 
   let nextUser = authenticatedUser;
@@ -697,28 +715,8 @@ export async function updateProfile(req: Request, res: Response) {
 
   const settingsData: Prisma.UserProfileSettingsUncheckedUpdateInput = {};
 
-  if (hasOwnProperty(body, 'membershipLabel')) {
-    settingsData.membershipLabel = normalizeOptionalText(body.membershipLabel);
-  }
-
-  if (hasOwnProperty(body, 'verified')) {
-    settingsData.verified = typeof body.verified === 'boolean' ? body.verified : null;
-  }
-
-  if (hasOwnProperty(body, 'memberSince')) {
-    settingsData.memberSince = normalizeOptionalDate(body.memberSince);
-  }
-
   if (hasOwnProperty(body, 'preferredGarage')) {
     settingsData.preferredGarage = normalizeOptionalText(body.preferredGarage);
-  }
-
-  if (hasOwnProperty(body, 'defaultVehicleLabel')) {
-    settingsData.defaultVehicleLabel = normalizeOptionalText(body.defaultVehicleLabel);
-  }
-
-  if (hasOwnProperty(body, 'loyaltyPoints')) {
-    settingsData.loyaltyPoints = normalizeOptionalInteger(body.loyaltyPoints);
   }
 
   if (hasOwnProperty(body, 'addressLine')) {
@@ -739,12 +737,7 @@ export async function updateProfile(req: Request, res: Response) {
       update: settingsData,
       create: {
         userId: nextUser.id,
-        membershipLabel: settingsData.membershipLabel as string | null | undefined,
-        verified: settingsData.verified as boolean | null | undefined,
-        memberSince: settingsData.memberSince as Date | null | undefined,
         preferredGarage: settingsData.preferredGarage as string | null | undefined,
-        defaultVehicleLabel: settingsData.defaultVehicleLabel as string | null | undefined,
-        loyaltyPoints: settingsData.loyaltyPoints as number | null | undefined,
         addressLine: settingsData.addressLine as string | null | undefined,
         city: settingsData.city as string | null | undefined,
         notes: settingsData.notes as string | null | undefined

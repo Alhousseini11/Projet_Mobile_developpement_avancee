@@ -356,6 +356,10 @@ runIntegrationTest('register, login refresh and profile flow work through HTTP',
 
   const initialProfileResult = await apiRequest<{
     email: string;
+    membershipLabel: string;
+    verified: boolean;
+    memberSince: string;
+    defaultVehicleLabel: string;
     appointmentCount: number;
     vehicleCount: number;
     loyaltyPoints: number;
@@ -365,6 +369,10 @@ runIntegrationTest('register, login refresh and profile flow work through HTTP',
 
   assert.equal(initialProfileResult.response.status, 200);
   assert.equal(initialProfileResult.payload?.email, session.email);
+  assert.equal(initialProfileResult.payload?.membershipLabel, 'Client');
+  assert.equal(initialProfileResult.payload?.verified, true);
+  assert.match(initialProfileResult.payload?.memberSince ?? '', /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(initialProfileResult.payload?.defaultVehicleLabel, 'Aucun vehicule');
   assert.equal(initialProfileResult.payload?.appointmentCount, 0);
   assert.equal(initialProfileResult.payload?.vehicleCount, 0);
   assert.equal(initialProfileResult.payload?.loyaltyPoints, 0);
@@ -405,6 +413,11 @@ runIntegrationTest('register, login refresh and profile flow work through HTTP',
     email: string;
     fullName: string;
     phone: string;
+    membershipLabel: string;
+    verified: boolean;
+    memberSince: string;
+    defaultVehicleLabel: string;
+    loyaltyPoints: number;
     addressLine: string;
     city: string;
     preferredGarage: string;
@@ -421,6 +434,38 @@ runIntegrationTest('register, login refresh and profile flow work through HTTP',
   assert.equal(profileResult.payload?.city, 'Quebec, QC');
   assert.equal(profileResult.payload?.preferredGarage, 'Garage Quebec Centre');
   assert.equal(profileResult.payload?.notes, 'Profil modifie depuis le test integration.');
+  assert.equal(profileResult.payload?.membershipLabel, 'Client');
+  assert.equal(profileResult.payload?.verified, true);
+  assert.equal(profileResult.payload?.defaultVehicleLabel, 'Aucun vehicule');
+  assert.equal(profileResult.payload?.loyaltyPoints, 0);
+
+  const protectedProfileUpdateResult = await apiRequest<{
+    notes: string;
+    membershipLabel: string;
+    verified: boolean;
+    memberSince: string;
+    defaultVehicleLabel: string;
+    loyaltyPoints: number;
+  }>('/api/profile', {
+    method: 'PUT',
+    token: loginResult.payload?.accessToken,
+    body: {
+      notes: 'Tentative de forcer des champs proteges.',
+      membershipLabel: 'Administrateur',
+      verified: false,
+      memberSince: '2001-01-01',
+      defaultVehicleLabel: 'Vehicule pirate',
+      loyaltyPoints: 9999
+    }
+  });
+
+  assert.equal(protectedProfileUpdateResult.response.status, 200);
+  assert.equal(protectedProfileUpdateResult.payload?.notes, 'Tentative de forcer des champs proteges.');
+  assert.equal(protectedProfileUpdateResult.payload?.membershipLabel, 'Client');
+  assert.equal(protectedProfileUpdateResult.payload?.verified, true);
+  assert.equal(protectedProfileUpdateResult.payload?.memberSince, profileResult.payload?.memberSince);
+  assert.equal(protectedProfileUpdateResult.payload?.defaultVehicleLabel, 'Aucun vehicule');
+  assert.equal(protectedProfileUpdateResult.payload?.loyaltyPoints, 0);
 
   const refreshedAfterProfileUpdate = await apiRequest<{
     accessToken: string;
@@ -1773,6 +1818,30 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   assert.equal(listTutorialsResult.response.status, 200);
   assert.ok(listTutorialsResult.payload?.some(item => item.id === createTutorialResult.payload?.id));
 
+  const searchTutorialsResult = await apiRequest<Array<{ id: string }>>('/api/tutorials/search?q=batterie');
+  assert.equal(searchTutorialsResult.response.status, 200);
+  assert.ok(searchTutorialsResult.payload?.some(item => item.id === createTutorialResult.payload?.id));
+
+  const searchTutorialsWithoutQueryResult = await apiRequest<Array<{ id: string }>>('/api/tutorials/search');
+  assert.equal(searchTutorialsWithoutQueryResult.response.status, 200);
+  assert.ok(
+    searchTutorialsWithoutQueryResult.payload?.some(item => item.id === createTutorialResult.payload?.id)
+  );
+
+  const searchTutorialsByInstructionResult = await apiRequest<Array<{ id: string }>>(
+    '/api/tutorials/search?q=tension'
+  );
+  assert.equal(searchTutorialsByInstructionResult.response.status, 200);
+  assert.ok(
+    searchTutorialsByInstructionResult.payload?.some(item => item.id === createTutorialResult.payload?.id)
+  );
+
+  const searchTutorialsByToolResult = await apiRequest<Array<{ id: string }>>(
+    '/api/tutorials/search?q=multimetre'
+  );
+  assert.equal(searchTutorialsByToolResult.response.status, 200);
+  assert.ok(searchTutorialsByToolResult.payload?.some(item => item.id === createTutorialResult.payload?.id));
+
   const popularTutorialsResult = await apiRequest<Array<{ id: string }>>('/api/tutorials/popular?limit=1');
   assert.equal(popularTutorialsResult.response.status, 200);
   assert.equal(popularTutorialsResult.payload?.length, 1);
@@ -1807,7 +1876,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
     `/api/tutorials/${createTutorialResult.payload?.id}`
   );
   assert.equal(tutorialAfterAnonymousViewResult.response.status, 200);
-  assert.equal(tutorialAfterAnonymousViewResult.payload?.views, 4);
+  assert.equal(tutorialAfterAnonymousViewResult.payload?.views, 0);
 
   const firstIncrementViewsResult = await apiRequest<null>(
     `/api/tutorials/${createTutorialResult.payload?.id}/views`,
@@ -1822,7 +1891,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
     `/api/tutorials/${createTutorialResult.payload?.id}`
   );
   assert.equal(tutorialAfterFirstQualifiedViewResult.response.status, 200);
-  assert.equal(tutorialAfterFirstQualifiedViewResult.payload?.views, 5);
+  assert.equal(tutorialAfterFirstQualifiedViewResult.payload?.views, 1);
 
   const secondIncrementViewsResult = await apiRequest<null>(
     `/api/tutorials/${createTutorialResult.payload?.id}/views`,
@@ -1837,7 +1906,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
     `/api/tutorials/${createTutorialResult.payload?.id}`
   );
   assert.equal(tutorialAfterSecondQualifiedViewResult.response.status, 200);
-  assert.equal(tutorialAfterSecondQualifiedViewResult.payload?.views, 5);
+  assert.equal(tutorialAfterSecondQualifiedViewResult.payload?.views, 1);
 
   const sessionUser = await prismaClient.user.findUnique({
     where: { email: session.email },
@@ -1870,7 +1939,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
     `/api/tutorials/${createTutorialResult.payload?.id}`
   );
   assert.equal(tutorialAfterThirdQualifiedViewResult.response.status, 200);
-  assert.equal(tutorialAfterThirdQualifiedViewResult.payload?.views, 6);
+  assert.equal(tutorialAfterThirdQualifiedViewResult.payload?.views, 2);
 
   const rateTutorialResult = await apiRequest<{ id: string; rating: number }>(
     `/api/tutorials/${createTutorialResult.payload?.id}/rate`,
@@ -1923,6 +1992,26 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   assert.equal(updateTutorialResult.payload?.difficulty, 'difficile');
   assert.equal(updateTutorialResult.payload?.rating, 4);
 
+  const invalidTutorialUpdateResult = await apiRequest<{ message: string }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}`,
+    {
+      method: 'PUT',
+      token: adminSession.accessToken,
+      body: {
+        title: 'Verifier la batterie 12V',
+        description: 'Tutoriel invalide',
+        category: 'batterie',
+        difficulty: 'expert',
+        duration: 14,
+        thumbnail: 'https://example.com/battery.png',
+        videoUrl: 'https://example.com/battery-updated.mp4',
+        instructions: ['Tester la batterie'],
+        tools: ['Multimetre']
+      }
+    }
+  );
+  assert.equal(invalidTutorialUpdateResult.response.status, 400);
+
   const missingTutorialResult = await apiRequest<{ message: string }>('/api/tutorials/missing-id');
   assert.equal(missingTutorialResult.response.status, 404);
 
@@ -1959,7 +2048,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
       title: null
     }
   });
-  assert.equal(invalidTutorialCreateResult.response.status, 503);
+  assert.equal(invalidTutorialCreateResult.response.status, 400);
 
   const unauthenticatedTutorialRateResult = await apiRequest<{ message: string }>(
     `/api/tutorials/${createTutorialResult.payload?.id}/rate`,
@@ -2008,7 +2097,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
       tools: []
     }
   });
-  assert.equal(missingTutorialUpdateResult.response.status, 503);
+  assert.equal(missingTutorialUpdateResult.response.status, 404);
 
   const paymentSummaryResult = await apiRequest<{
     status: string;
@@ -2075,5 +2164,5 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
     method: 'DELETE',
     token: adminSession.accessToken
   });
-  assert.equal(missingTutorialDeleteResult.response.status, 503);
+  assert.equal(missingTutorialDeleteResult.response.status, 404);
 });
