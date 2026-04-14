@@ -1,5 +1,7 @@
 import { ReservationStatus, Role, TutorialCategory, TutorialDifficulty } from '@prisma/client';
 import { Request, Response } from 'express';
+import { env } from '../../config/env';
+import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { AppError } from '../../shared/errors';
 import {
@@ -9,6 +11,11 @@ import {
   listReservationServiceCatalog,
   updateReservationServiceRecord
 } from '../reservations/reservationServices.store';
+import {
+  buildPublicAssetUrl,
+  buildTutorialUploadPublicPath,
+  removeTutorialVideoFileByFilename
+} from '../tutorials/tutorialMedia';
 
 type AdminSummaryPayload = {
   metrics: {
@@ -258,10 +265,6 @@ function normalizeTutorialDifficulty(value: unknown): TutorialDifficulty {
   }
 }
 
-function buildPublicAssetUrl(req: Request, relativePath: string) {
-  return `${req.protocol}://${req.get('host')}${relativePath}`;
-}
-
 const adminUserSelect = {
   id: true,
   fullName: true,
@@ -369,7 +372,11 @@ function normalizeTutorialDraft(req: Request) {
     difficulty: normalizeTutorialDifficulty(payload.difficulty),
     duration: normalizePositiveInteger(payload.duration, 'La duree'),
     thumbnail: normalizeOptionalTrimmedString(payload.thumbnail) || 'https://placehold.co/640x360?text=Garage+Mechanic',
-    videoUrl: buildPublicAssetUrl(req, `/uploads/tutorials/${req.file.filename}`),
+    videoUrl: buildPublicAssetUrl(
+      req,
+      buildTutorialUploadPublicPath(req.file.filename),
+      { publicBaseUrl: env.PUBLIC_BASE_URL }
+    ),
     instructions: normalizeStringList(payload.instructions, 'Au moins une instruction', { required: true }),
     tools: normalizeStringList(payload.tools, 'Les outils')
   };
@@ -843,6 +850,17 @@ export async function createAdminTutorial(req: Request, res: Response) {
 
     res.status(201).json(mapAdminTutorial(created));
   } catch (error) {
+    if (req.file?.filename) {
+      try {
+        await removeTutorialVideoFileByFilename(req.file.filename);
+      } catch (cleanupError) {
+        logger.warn(
+          { err: cleanupError, filename: req.file.filename },
+          'Unable to cleanup tutorial upload after admin create failure'
+        );
+      }
+    }
+
     return toAdminErrorResponse(res, error);
   }
 }

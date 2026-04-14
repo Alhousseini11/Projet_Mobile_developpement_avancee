@@ -1,9 +1,14 @@
 import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
+import { AppError } from '../../shared/errors';
 import { resolveOptionalRequestUser } from '../auth/auth.service';
 import { isSchemaDriftError } from '../_shared/isSchemaDriftError';
 import { isCurrentTutorialSchemaAvailable } from '../_shared/schemaCapabilities';
+import {
+  areSameManagedTutorialVideoUrl,
+  removeManagedTutorialVideoByUrl
+} from './tutorialMedia';
 
 type TutorialCategory =
   | 'entretien'
@@ -155,6 +160,16 @@ function normalizeDurationFromSeconds(durationSec: number | null | undefined) {
   }
 
   return Math.max(1, Math.round(Number(durationSec) / 60));
+}
+
+function normalizeTutorialRating(value: unknown) {
+  const normalized = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
+
+  if (!Number.isInteger(normalized) || normalized < 1 || normalized > 5) {
+    throw new AppError('La note du tutoriel doit etre un entier entre 1 et 5.', 400);
+  }
+
+  return normalized;
 }
 
 function shouldCountQualifiedTutorialView(
@@ -329,7 +344,7 @@ export async function createTutorial(req: Request, res: Response) {
         instructions: data.instructions ?? [],
         tools: data.tools ?? [],
         views: data.views ?? 0,
-        rating: data.rating ?? 0
+        rating: 0
       }
     });
 
@@ -362,6 +377,11 @@ export async function updateTutorial(req: Request, res: Response) {
   const data = req.body;
 
   try {
+    const existingTutorial = await prisma.tutorial.findUnique({
+      where: { id },
+      select: { videoUrl: true }
+    });
+
     const tutorial = await prisma.tutorial.update({
       where: { id },
       data: {
@@ -373,10 +393,23 @@ export async function updateTutorial(req: Request, res: Response) {
         thumbnail: data.thumbnail,
         videoUrl: data.videoUrl,
         instructions: data.instructions ?? undefined,
-        tools: data.tools ?? undefined,
-        rating: data.rating ?? undefined
+        tools: data.tools ?? undefined
       }
     });
+
+    if (
+      existingTutorial?.videoUrl &&
+      !areSameManagedTutorialVideoUrl(existingTutorial.videoUrl, tutorial.videoUrl)
+    ) {
+      try {
+        await removeManagedTutorialVideoByUrl(existingTutorial.videoUrl);
+      } catch (cleanupError) {
+        logger.warn(
+          { err: cleanupError, tutorialId: id, videoUrl: existingTutorial.videoUrl },
+          'Unable to cleanup previous tutorial video after update'
+        );
+      }
+    }
 
     res.json(mapCurrentTutorial({
       ...tutorial,
@@ -393,7 +426,24 @@ export async function deleteTutorial(req: Request, res: Response) {
   const { id } = req.params;
 
   try {
+    const existingTutorial = await prisma.tutorial.findUnique({
+      where: { id },
+      select: { videoUrl: true }
+    });
+
     await prisma.tutorial.delete({ where: { id } });
+
+    if (existingTutorial?.videoUrl) {
+      try {
+        await removeManagedTutorialVideoByUrl(existingTutorial.videoUrl);
+      } catch (cleanupError) {
+        logger.warn(
+          { err: cleanupError, tutorialId: id, videoUrl: existingTutorial.videoUrl },
+          'Unable to cleanup tutorial video after delete'
+        );
+      }
+    }
+
     res.status(204).end();
   } catch (error) {
     logger.error({ err: error, tutorialId: id }, 'Error deleting tutorial');
@@ -497,12 +547,51 @@ export async function incrementTutorialViews(req: Request, res: Response) {
 
 export async function rateTutorial(req: Request, res: Response) {
   const { id } = req.params;
-  const { rating } = req.body;
+  const authUser = await resolveOptionalRequestUser(req);
+
+  if (!authUser?.id) {
+    res.status(401).json({ message: 'Authentification requise.' });
+    return;
+  }
 
   try {
+    const rating = normalizeTutorialRating(req.body?.rating);
+    const existingTutorial = await prisma.tutorial.findUnique({
+      where: { id },
+      select: { id: true }
+    });
+
+    if (!existingTutorial) {
+      res.status(404).json({ message: 'Tutorial not found' });
+      return;
+    }
+
+    await prisma.tutorialRating.upsert({
+      where: {
+        userId_tutorialId: {
+          userId: authUser.id,
+          tutorialId: id
+        }
+      },
+      update: {
+        rating
+      },
+      create: {
+        userId: authUser.id,
+        tutorialId: id,
+        rating
+      }
+    });
+
+    const aggregate = await prisma.tutorialRating.aggregate({
+      where: { tutorialId: id },
+      _avg: { rating: true }
+    });
+
+    const averageRating = Number((aggregate._avg.rating ?? 0).toFixed(1));
     const tutorial = await prisma.tutorial.update({
       where: { id },
-      data: { rating }
+      data: { rating: averageRating }
     });
 
     res.json(mapCurrentTutorial({
@@ -511,6 +600,11 @@ export async function rateTutorial(req: Request, res: Response) {
       difficulty: String(tutorial.difficulty)
     }));
   } catch (error) {
+    if (error instanceof AppError) {
+      res.status(error.status).json({ message: error.message });
+      return;
+    }
+
     logger.error({ err: error, tutorialId: id }, 'Error rating tutorial');
     res.status(503).json({ message: 'Tutorial rating is not available on this deployment.' });
   }
@@ -523,6 +617,7 @@ export const __tutorialControllerInternals = {
   normalizeDifficulty,
   normalizeDuration,
   normalizeDurationFromSeconds,
+  normalizeTutorialRating,
   shouldCountQualifiedTutorialView,
   cloneTutorial,
   mapCurrentTutorial,
