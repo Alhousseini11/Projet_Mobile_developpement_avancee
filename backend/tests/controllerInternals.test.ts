@@ -145,6 +145,15 @@ test('tutorial controller internals normalize categories, difficulty and catalog
   assert.equal(__tutorialControllerInternals.normalizeDuration(null), 0);
   assert.equal(__tutorialControllerInternals.normalizeDurationFromSeconds(90), 2);
   assert.equal(__tutorialControllerInternals.normalizeDurationFromSeconds(null), 0);
+  assert.equal(__tutorialControllerInternals.normalizeTutorialRating(5), 5);
+  assert.throws(
+    () => __tutorialControllerInternals.normalizeTutorialRating(0),
+    /entier entre 1 et 5/i
+  );
+  assert.throws(
+    () => __tutorialControllerInternals.normalizeTutorialRating(4.5),
+    /entier entre 1 et 5/i
+  );
   assert.equal(__tutorialControllerInternals.shouldCountQualifiedTutorialView(null), true);
   assert.equal(
     __tutorialControllerInternals.shouldCountQualifiedTutorialView(

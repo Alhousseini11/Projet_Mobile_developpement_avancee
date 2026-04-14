@@ -5,9 +5,9 @@ import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { createStripeClient } from '../../data/stripe/stripeClient';
+import { AppError } from '../../shared/errors';
 import { isCurrentVehicleSchemaAvailable } from '../_shared/schemaCapabilities';
 import {
-  ensureDemoUserExists,
   resolveOptionalRequestUser,
   type AuthenticatedUser
 } from '../auth/auth.service';
@@ -403,7 +403,7 @@ async function resolveProfileUser(req: Request) {
     return authenticatedUser;
   }
 
-  return ensureDemoUserExists();
+  throw new AppError('Authentification requise.', 401);
 }
 
 async function countVehicles(userId: string) {
@@ -445,12 +445,8 @@ async function findDefaultVehicleLabel(userId: string) {
 }
 
 async function buildProfileResponseForUser(
-  authenticatedUser: AuthenticatedUser | null
+  authenticatedUser: AuthenticatedUser
 ): Promise<ProfilePayload> {
-  if (!authenticatedUser) {
-    return { ...defaultProfileState };
-  }
-
   const [settings, vehicleCount, appointmentCount, detectedVehicleLabel] = await Promise.all([
     prisma.userProfileSettings.findUnique({
       where: { userId: authenticatedUser.id }
@@ -662,21 +658,6 @@ export async function updateProfile(req: Request, res: Response) {
   const body = (req.body ?? {}) as Partial<ProfilePayload>;
   const authenticatedUser = await resolveProfileUser(req);
 
-  if (!authenticatedUser) {
-    if (hasOwnProperty(body, 'fullName') && typeof body.fullName === 'string') {
-      defaultProfileState.fullName = body.fullName.trim() || defaultProfileState.fullName;
-    }
-    if (hasOwnProperty(body, 'email') && typeof body.email === 'string') {
-      defaultProfileState.email = body.email.trim().toLowerCase() || defaultProfileState.email;
-    }
-    if (hasOwnProperty(body, 'phone') && typeof body.phone === 'string') {
-      defaultProfileState.phone = body.phone.trim() || defaultProfileState.phone;
-    }
-
-    res.json({ ...defaultProfileState });
-    return;
-  }
-
   let nextUser = authenticatedUser;
 
   try {
@@ -781,21 +762,13 @@ export async function getPaymentMethod(req: Request, res: Response) {
 
 export async function listInvoices(req: Request, res: Response) {
   const authenticatedUser = await resolveProfileUser(req);
-
-  if (!authenticatedUser) {
-    res.json(getInvoiceSummaries(defaultInvoices.map(cloneInvoice)));
-    return;
-  }
-
   const invoices = await buildInvoicesForUser(authenticatedUser);
   res.json(getInvoiceSummaries(invoices));
 }
 
 export async function downloadInvoicePdf(req: Request, res: Response) {
   const authenticatedUser = await resolveProfileUser(req);
-  const invoices = authenticatedUser
-    ? await buildInvoicesForUser(authenticatedUser)
-    : defaultInvoices.map(cloneInvoice);
+  const invoices = await buildInvoicesForUser(authenticatedUser);
   const invoice = findInvoiceById(invoices, req.params.invoiceId);
 
   if (!invoice) {
@@ -804,13 +777,11 @@ export async function downloadInvoicePdf(req: Request, res: Response) {
     });
   }
 
-  const profile = authenticatedUser
-    ? await buildProfileResponseForUser(authenticatedUser)
-    : { ...defaultProfileState };
+  const profile = await buildProfileResponseForUser(authenticatedUser);
   const pdfBuffer = buildInvoicePdf(
     invoice,
     profile,
-    await getPaymentSummaryForUser(authenticatedUser?.id)
+    await getPaymentSummaryForUser(authenticatedUser.id)
   );
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${invoice.number}.pdf"`);
@@ -826,12 +797,6 @@ export async function createPaymentCheckoutSession(req: Request, res: Response) 
     }
 
     const authenticatedUser = await resolveProfileUser(req);
-    if (!authenticatedUser) {
-      return res.status(401).json({
-        message: 'Authentification requise.'
-      });
-    }
-
     const profile = await buildProfileResponseForUser(authenticatedUser);
     const stripe = createStripeClient();
     const customerId = await ensureStripeCustomer(profile);
@@ -893,12 +858,6 @@ export async function syncPaymentMethod(req: Request, res: Response) {
     }
 
     const authenticatedUser = await resolveProfileUser(req);
-    if (!authenticatedUser) {
-      return res.status(401).json({
-        message: 'Authentification requise.'
-      });
-    }
-
     const existingState = await prisma.paymentMethod.findUnique({
       where: { userId: authenticatedUser.id }
     });

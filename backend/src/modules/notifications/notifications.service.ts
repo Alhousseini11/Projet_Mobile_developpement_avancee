@@ -168,9 +168,6 @@ export async function listNotificationsForUser(userId: string) {
       where: {
         vehicle: {
           userId
-        },
-        dueAt: {
-          gte: now
         }
       },
       orderBy: {

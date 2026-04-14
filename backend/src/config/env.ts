@@ -39,6 +39,7 @@ export const env = {
   STRIPE_KEY: process.env.STRIPE_KEY || '',
   STRIPE_SUCCESS_URL: process.env.STRIPE_SUCCESS_URL || '',
   STRIPE_CANCEL_URL: process.env.STRIPE_CANCEL_URL || '',
+  PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || '',
   S3_BUCKET: process.env.S3_BUCKET || '',
   GOOGLE_MAPS_KEY: process.env.GOOGLE_MAPS_KEY || '',
   DEMO_MODE: readBooleanEnv(process.env.DEMO_MODE, true)

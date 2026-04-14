@@ -1,7 +1,10 @@
 import { Router } from 'express';
+import { authGuard } from '../../core/http/middleware/authGuard';
 import * as controller from './profile.controller';
 
 const router = Router();
+
+router.use(authGuard);
 
 router.get('/', controller.getProfile);
 router.put('/', controller.updateProfile);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
+import { existsSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { resolve } from 'node:path';
 import { Client } from 'pg';
@@ -917,6 +918,14 @@ runIntegrationTest('admin web and admin APIs are protected and allow service and
   assert.equal(createdTutorialResult.response.status, 201);
   assert.equal(createdTutorialResult.payload?.title, 'Verifier la batterie');
   assert.match(createdTutorialResult.payload?.videoUrl ?? '', /\/uploads\/tutorials\//i);
+  const createdTutorialVideoPathname = createdTutorialResult.payload?.videoUrl?.startsWith('http')
+    ? new URL(createdTutorialResult.payload.videoUrl).pathname
+    : createdTutorialResult.payload?.videoUrl ?? '';
+  const createdTutorialVideoFilePath = resolve(
+    backendDir,
+    ...createdTutorialVideoPathname.replace(/^\/+/, '').split('/').filter(Boolean)
+  );
+  assert.equal(existsSync(createdTutorialVideoFilePath), true);
 
   const listTutorialsResult = await apiRequest<Array<{ id: string; title: string }>>('/api/admin/tutorials', {
     token: adminSession.accessToken
@@ -925,6 +934,16 @@ runIntegrationTest('admin web and admin APIs are protected and allow service and
   assert.ok(
     listTutorialsResult.payload?.some(item => item.id === createdTutorialResult.payload?.id)
   );
+
+  const deleteTutorialResult = await apiRequest<null>(
+    `/api/tutorials/${createdTutorialResult.payload?.id}`,
+    {
+      method: 'DELETE',
+      token: adminSession.accessToken
+    }
+  );
+  assert.equal(deleteTutorialResult.response.status, 204);
+  assert.equal(existsSync(createdTutorialVideoFilePath), false);
 });
 
 runIntegrationTest('admin can list and delete harmful reviews through admin API', async () => {
@@ -1068,37 +1087,27 @@ runIntegrationTest('admin can list and delete harmful reviews through admin API'
   );
 });
 
-runIntegrationTest('public profile and billing endpoints expose demo account data', async () => {
+runIntegrationTest('profile and billing endpoints require authentication', async () => {
   const profileResult = await apiRequest<{
-    fullName: string;
-    email: string;
-    appointmentCount: number;
-    vehicleCount: number;
+    message: string;
   }>('/api/profile');
-  assert.equal(profileResult.response.status, 200);
-  assert.equal(profileResult.payload?.fullName, 'Alex Martin');
-  assert.equal(profileResult.payload?.email, 'alex.martin@example.com');
-  assert.ok((profileResult.payload?.appointmentCount ?? 0) >= 2);
+  assert.equal(profileResult.response.status, 401);
+  assert.match(profileResult.payload?.message ?? '', /authentification requise/i);
 
   const paymentMethodResult = await apiRequest<{
-    provider: string;
-    status: string;
-    card: unknown;
+    message: string;
   }>('/api/profile/payment-method');
-  assert.equal(paymentMethodResult.response.status, 200);
-  assert.equal(paymentMethodResult.payload?.provider, 'stripe');
-  assert.equal(paymentMethodResult.payload?.card, null);
+  assert.equal(paymentMethodResult.response.status, 401);
+  assert.match(paymentMethodResult.payload?.message ?? '', /authentification requise/i);
 
-  const invoicesResult = await apiRequest<Array<{ id: string; serviceLabel: string }>>(
+  const invoicesResult = await apiRequest<{ message: string }>(
     '/api/profile/invoices'
   );
-  assert.equal(invoicesResult.response.status, 200);
-  assert.ok((invoicesResult.payload?.length ?? 0) >= 2);
+  assert.equal(invoicesResult.response.status, 401);
+  assert.match(invoicesResult.payload?.message ?? '', /authentification requise/i);
 
-  const pdfResult = await rawRequest(`/api/profile/invoices/${invoicesResult.payload?.[0]?.id}/pdf`);
-  assert.equal(pdfResult.response.status, 200);
-  assert.match(pdfResult.response.headers.get('content-type') ?? '', /application\/pdf/i);
-  assert.ok(pdfResult.body.length > 0);
+  const pdfResult = await rawRequest('/api/profile/invoices/missing/pdf');
+  assert.equal(pdfResult.response.status, 401);
 });
 
 runIntegrationTest('authenticated user can create reservations and reviews through HTTP', async () => {
@@ -1758,6 +1767,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   assert.equal(createTutorialResult.payload?.title, 'Verifier la batterie');
   assert.equal(createTutorialResult.payload?.category, 'batterie');
   assert.equal(createTutorialResult.payload?.difficulty, 'facile');
+  assert.equal(createTutorialResult.payload?.rating, 0);
 
   const listTutorialsResult = await apiRequest<Array<{ id: string }>>('/api/tutorials');
   assert.equal(listTutorialsResult.response.status, 200);
@@ -1866,15 +1876,30 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
     `/api/tutorials/${createTutorialResult.payload?.id}/rate`,
     {
       method: 'POST',
+      token: session.accessToken,
       body: {
-        rating: 4.8
+        rating: 5
       }
     }
   );
   assert.equal(rateTutorialResult.response.status, 200);
-  assert.equal(rateTutorialResult.payload?.rating, 4.8);
+  assert.equal(rateTutorialResult.payload?.rating, 5);
 
-  const updateTutorialResult = await apiRequest<{ id: string; title: string; difficulty: string }>(
+  const secondRatingSession = await registerUser();
+  const secondRateTutorialResult = await apiRequest<{ id: string; rating: number }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}/rate`,
+    {
+      method: 'POST',
+      token: secondRatingSession.accessToken,
+      body: {
+        rating: 3
+      }
+    }
+  );
+  assert.equal(secondRateTutorialResult.response.status, 200);
+  assert.equal(secondRateTutorialResult.payload?.rating, 4);
+
+  const updateTutorialResult = await apiRequest<{ id: string; title: string; difficulty: string; rating: number }>(
     `/api/tutorials/${createTutorialResult.payload?.id}`,
     {
       method: 'PUT',
@@ -1896,6 +1921,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   assert.equal(updateTutorialResult.response.status, 200);
   assert.equal(updateTutorialResult.payload?.title, 'Verifier la batterie 12V');
   assert.equal(updateTutorialResult.payload?.difficulty, 'difficile');
+  assert.equal(updateTutorialResult.payload?.rating, 4);
 
   const missingTutorialResult = await apiRequest<{ message: string }>('/api/tutorials/missing-id');
   assert.equal(missingTutorialResult.response.status, 404);
@@ -1935,13 +1961,37 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   });
   assert.equal(invalidTutorialCreateResult.response.status, 503);
 
+  const unauthenticatedTutorialRateResult = await apiRequest<{ message: string }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}/rate`,
+    {
+      method: 'POST',
+      body: {
+        rating: 4
+      }
+    }
+  );
+  assert.equal(unauthenticatedTutorialRateResult.response.status, 401);
+
+  const invalidTutorialRateResult = await apiRequest<{ message: string }>(
+    `/api/tutorials/${createTutorialResult.payload?.id}/rate`,
+    {
+      method: 'POST',
+      token: session.accessToken,
+      body: {
+        rating: 6
+      }
+    }
+  );
+  assert.equal(invalidTutorialRateResult.response.status, 400);
+
   const missingTutorialRateResult = await apiRequest<{ message: string }>('/api/tutorials/missing-id/rate', {
     method: 'POST',
+    token: session.accessToken,
     body: {
       rating: 4
     }
   });
-  assert.equal(missingTutorialRateResult.response.status, 503);
+  assert.equal(missingTutorialRateResult.response.status, 404);
 
   const missingTutorialUpdateResult = await apiRequest<{ message: string }>('/api/tutorials/missing-id', {
     method: 'PUT',
