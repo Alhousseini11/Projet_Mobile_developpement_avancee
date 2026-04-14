@@ -154,7 +154,7 @@ import { computed, ref } from 'nativescript-vue'
 import ProfileService from '@/services/ProfileService'
 import { formatDate } from '@/utils/ui'
 import { goBack as navigateBack, navigateToPage, type AppPage } from '@/utils/navigation'
-import type { UserProfile } from '@/types/profile'
+import type { ProfileUpdatePayload, UserProfile } from '@/types/profile'
 
 interface EditableProfileForm {
   fullName: string
@@ -234,7 +234,7 @@ function applyProfile(nextProfile: UserProfile) {
   form.value = createFormFromProfile(nextProfile)
 }
 
-function buildProfilePayload(): Partial<UserProfile> {
+function buildProfilePayload(): ProfileUpdatePayload {
   return {
     fullName: normalizeValue(form.value.fullName),
     email: normalizeValue(form.value.email).toLowerCase(),

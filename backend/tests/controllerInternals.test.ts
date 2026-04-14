@@ -130,14 +130,28 @@ test('vehicle controller internals normalize write payloads and mappings', () =>
 });
 
 test('tutorial controller internals normalize categories, difficulty and catalog records', () => {
+  const normalizedDate = new Date('2026-03-24T10:00:00.000Z');
+  assert.equal(__tutorialControllerInternals.normalizeDate(normalizedDate), normalizedDate);
+  assert.ok(__tutorialControllerInternals.normalizeDate('bad-date') instanceof Date);
+
+  assert.deepEqual(__tutorialControllerInternals.ensureStringArray('not-an-array'), []);
   assert.equal(__tutorialControllerInternals.normalizeCategory('battery'), 'batterie');
+  assert.equal(__tutorialControllerInternals.normalizeCategory('freins'), 'freins');
+  assert.equal(__tutorialControllerInternals.normalizeCategory('suspension'), 'suspension');
+  assert.equal(__tutorialControllerInternals.normalizeCategory('diagnostic'), 'diagnostic');
   assert.equal(__tutorialControllerInternals.normalizeCategory('lighting'), 'eclairage');
+  assert.equal(__tutorialControllerInternals.normalizeCategory('fluid'), 'fluide');
+  assert.equal(__tutorialControllerInternals.normalizeCategory('maintenance'), 'entretien');
+  assert.equal(__tutorialControllerInternals.normalizeCategory('mechanic'), 'mecanique');
   assert.equal(__tutorialControllerInternals.normalizeCategory('mechanique'), 'mecanique');
   assert.equal(__tutorialControllerInternals.normalizeCategory('unknown'), 'entretien');
 
   assert.equal(__tutorialControllerInternals.normalizeDifficulty('easy'), 'facile');
+  assert.equal(__tutorialControllerInternals.normalizeDifficulty('facile'), 'facile');
   assert.equal(__tutorialControllerInternals.normalizeDifficulty('hard'), 'difficile');
+  assert.equal(__tutorialControllerInternals.normalizeDifficulty('difficile'), 'difficile');
   assert.equal(__tutorialControllerInternals.normalizeDifficulty('medium'), 'moyen');
+  assert.equal(__tutorialControllerInternals.normalizeDifficulty('moyen'), 'moyen');
   assert.equal(__tutorialControllerInternals.normalizeDifficulty(undefined), 'moyen');
 
   assert.equal(__tutorialControllerInternals.normalizeDuration(8.2), 8);
@@ -146,15 +160,120 @@ test('tutorial controller internals normalize categories, difficulty and catalog
   assert.equal(__tutorialControllerInternals.normalizeDurationFromSeconds(90), 2);
   assert.equal(__tutorialControllerInternals.normalizeDurationFromSeconds(null), 0);
   assert.equal(__tutorialControllerInternals.normalizeTutorialRating(5), 5);
+  assert.deepEqual(
+    __tutorialControllerInternals.normalizeTutorialWritePayload({
+      title: '  Verifier la batterie  ',
+      description: '  Tutoriel utile  ',
+      category: 'battery',
+      difficulty: 'easy',
+      duration: '12',
+      thumbnail: ' https://example.com/thumb.png ',
+      videoUrl: ' https://example.com/video.mp4 ',
+      instructions: [' Couper le moteur ', 42, 'Verifier la tension'],
+      tools: [' Multimetre ', null]
+    }),
+    {
+      title: 'Verifier la batterie',
+      description: 'Tutoriel utile',
+      category: 'batterie',
+      difficulty: 'facile',
+      duration: 12,
+      thumbnail: 'https://example.com/thumb.png',
+      videoUrl: 'https://example.com/video.mp4',
+      instructions: ['Couper le moteur', 'Verifier la tension'],
+      tools: ['Multimetre']
+    }
+  );
+  const tutorialAliasCases = [
+    { category: 'entretien', difficulty: 'facile', expectedCategory: 'entretien', expectedDifficulty: 'facile' },
+    { category: 'maintenance', difficulty: 'easy', expectedCategory: 'entretien', expectedDifficulty: 'facile' },
+    { category: 'freins', difficulty: 'moyen', expectedCategory: 'freins', expectedDifficulty: 'moyen' },
+    { category: 'suspension', difficulty: 'medium', expectedCategory: 'suspension', expectedDifficulty: 'moyen' },
+    { category: 'diagnostic', difficulty: 'difficile', expectedCategory: 'diagnostic', expectedDifficulty: 'difficile' },
+    { category: 'eclairage', difficulty: 'hard', expectedCategory: 'eclairage', expectedDifficulty: 'difficile' },
+    { category: 'lighting', difficulty: 'facile', expectedCategory: 'eclairage', expectedDifficulty: 'facile' },
+    { category: 'fluide', difficulty: 'moyen', expectedCategory: 'fluide', expectedDifficulty: 'moyen' },
+    { category: 'fluid', difficulty: 'difficile', expectedCategory: 'fluide', expectedDifficulty: 'difficile' },
+    { category: 'mecanique', difficulty: 'easy', expectedCategory: 'mecanique', expectedDifficulty: 'facile' },
+    { category: 'mechanique', difficulty: 'medium', expectedCategory: 'mecanique', expectedDifficulty: 'moyen' },
+    { category: 'mechanic', difficulty: 'hard', expectedCategory: 'mecanique', expectedDifficulty: 'difficile' }
+  ];
+  for (const tutorialAliasCase of tutorialAliasCases) {
+    const normalized = __tutorialControllerInternals.normalizeTutorialWritePayload({
+      title: 'Tutoriel test',
+      description: 'Description test',
+      category: tutorialAliasCase.category,
+      difficulty: tutorialAliasCase.difficulty,
+      duration: 10,
+      thumbnail: 'https://example.com/thumb.png',
+      videoUrl: 'https://example.com/video.mp4',
+      instructions: ['Etape 1'],
+      tools: undefined
+    });
+    assert.equal(normalized.category, tutorialAliasCase.expectedCategory);
+    assert.equal(normalized.difficulty, tutorialAliasCase.expectedDifficulty);
+    assert.deepEqual(normalized.tools, []);
+  }
   assert.throws(
     () => __tutorialControllerInternals.normalizeTutorialRating(0),
     /entier entre 1 et 5/i
   );
+  assert.equal(__tutorialControllerInternals.normalizeTutorialRating('4'), 4);
   assert.throws(
     () => __tutorialControllerInternals.normalizeTutorialRating(4.5),
     /entier entre 1 et 5/i
   );
+  assert.throws(
+    () => __tutorialControllerInternals.normalizeTutorialWritePayload(null),
+    /titre/i
+  );
+  assert.throws(
+    () => __tutorialControllerInternals.normalizeTutorialWritePayload({
+      title: 'Tutoriel incomplet',
+      description: '',
+      category: 'unknown',
+      difficulty: 'facile',
+      duration: 0,
+      thumbnail: '',
+      videoUrl: '',
+      instructions: [],
+      tools: []
+    }),
+    /description|categorie|duree|miniature|video|instruction/i
+  );
+  assert.throws(
+    () => __tutorialControllerInternals.normalizeTutorialWritePayload({
+      title: 'Tutoriel incomplet',
+      description: 'Description',
+      category: 'batterie',
+      difficulty: 'expert',
+      duration: 8,
+      thumbnail: 'https://example.com/thumb.png',
+      videoUrl: 'https://example.com/video.mp4',
+      instructions: ['Etape 1'],
+      tools: []
+    }),
+    /difficulte/i
+  );
+  assert.throws(
+    () => __tutorialControllerInternals.normalizeTutorialWritePayload({
+      title: 'Tutoriel incomplet',
+      description: 'Description',
+      category: 'batterie',
+      difficulty: 'facile',
+      duration: 8,
+      thumbnail: 'https://example.com/thumb.png',
+      videoUrl: 'https://example.com/video.mp4',
+      instructions: 'Etape 1',
+      tools: []
+    }),
+    /instruction/i
+  );
   assert.equal(__tutorialControllerInternals.shouldCountQualifiedTutorialView(null), true);
+  assert.equal(
+    __tutorialControllerInternals.shouldCountQualifiedTutorialView(new Date('invalid')),
+    true
+  );
   assert.equal(
     __tutorialControllerInternals.shouldCountQualifiedTutorialView(
       new Date('2026-03-24T10:00:00.000Z'),
@@ -182,8 +301,8 @@ test('tutorial controller internals normalize categories, difficulty and catalog
     category: 'battery',
     difficulty: 'easy',
     duration: 12.6,
-    views: 14,
-    rating: 4.7,
+    views: -14,
+    rating: Number.NaN,
     thumbnail: '',
     videoUrl: 'https://example.com/video',
     instructions: ['Couper le moteur', 42],
@@ -194,6 +313,8 @@ test('tutorial controller internals normalize categories, difficulty and catalog
   assert.equal(mappedCurrent.category, 'batterie');
   assert.equal(mappedCurrent.difficulty, 'facile');
   assert.equal(mappedCurrent.duration, 13);
+  assert.equal(mappedCurrent.views, 0);
+  assert.equal(mappedCurrent.rating, 0);
   assert.equal(mappedCurrent.thumbnail, 'res://logo');
   assert.deepEqual(mappedCurrent.instructions, ['Couper le moteur']);
   assert.deepEqual(mappedCurrent.tools, ['Multimetre']);
@@ -217,6 +338,7 @@ test('tutorial controller internals normalize categories, difficulty and catalog
   assert.equal(mappedLegacy.difficulty, 'difficile');
   assert.equal(mappedLegacy.duration, 7);
   assert.equal(mappedLegacy.thumbnail, 'res://logo');
+  assert.match(mappedLegacy.videoUrl, /example\.com\/videos\/tutorial/i);
   assert.match(mappedLegacy.description, /legacy/i);
 });
 

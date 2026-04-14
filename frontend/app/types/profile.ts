@@ -16,6 +16,16 @@ export interface UserProfile {
   notes: string
 }
 
+export interface ProfileUpdatePayload {
+  fullName: string
+  email: string
+  phone: string
+  addressLine: string
+  city: string
+  preferredGarage: string
+  notes: string
+}
+
 export type PaymentMethodStatus = 'not_configured' | 'pending' | 'ready'
 
 export interface PaymentMethodCard {
