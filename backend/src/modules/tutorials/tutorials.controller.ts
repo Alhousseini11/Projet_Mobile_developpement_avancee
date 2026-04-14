@@ -1,465 +1,34 @@
-import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';
 import { AppError } from '../../shared/errors';
 import { resolveOptionalRequestUser } from '../auth/auth.service';
-import { isSchemaDriftError } from '../_shared/isSchemaDriftError';
-import { isCurrentTutorialSchemaAvailable } from '../_shared/schemaCapabilities';
+import {
+  cloneTutorial,
+  ensureStringArray,
+  mapCurrentTutorial,
+  mapLegacyTutorial,
+  normalizeDate,
+  normalizeDuration,
+  normalizeDurationFromSeconds,
+  readTutorialCatalog,
+  searchTutorialCatalog
+} from './tutorials.catalog';
+import {
+  buildTutorialCreateData,
+  buildTutorialUpdateData,
+  isPrismaRecordNotFoundError,
+  isPrismaValidationError,
+  normalizeTutorialCategory,
+  normalizeTutorialDifficulty,
+  normalizeTutorialRating,
+  normalizeTutorialWritePayload,
+  shouldCountQualifiedTutorialView
+} from './tutorials.normalization';
 import {
   areSameManagedTutorialVideoUrl,
   removeManagedTutorialVideoByUrl
 } from './tutorialMedia';
-
-type TutorialCategory =
-  | 'entretien'
-  | 'freins'
-  | 'suspension'
-  | 'batterie'
-  | 'diagnostic'
-  | 'eclairage'
-  | 'fluide'
-  | 'mecanique';
-
-type TutorialDifficulty = 'facile' | 'moyen' | 'difficile';
-
-interface TutorialResponse {
-  id: string;
-  title: string;
-  description: string;
-  category: TutorialCategory;
-  difficulty: TutorialDifficulty;
-  duration: number;
-  views: number;
-  rating: number;
-  thumbnail: string;
-  videoUrl: string;
-  instructions: string[];
-  tools: string[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface LegacyTutorialRow {
-  id: string;
-  title: string;
-  category: string | null;
-  difficulty: string | null;
-  videoUrl: string | null;
-  thumbnail: string | null;
-  durationSec: number | null;
-  createdAt: Date | string | null;
-}
-
-interface TutorialWritePayload {
-  title: string;
-  description: string;
-  category: TutorialCategory;
-  difficulty: TutorialDifficulty;
-  duration: number;
-  thumbnail: string;
-  videoUrl: string;
-  instructions: string[];
-  tools: string[];
-}
-
-const FALLBACK_TUTORIALS: TutorialResponse[] = [
-  {
-    id: 'tutorial-brakes-fallback',
-    title: 'Changer les plaquettes de frein',
-    description: 'Guide de base pour verifier et remplacer les plaquettes de frein.',
-    category: 'freins',
-    difficulty: 'moyen',
-    duration: 8,
-    views: 0,
-    rating: 0,
-    thumbnail: 'res://logo',
-    videoUrl: 'https://example.com/videos/brake-pads',
-    instructions: [
-      'Lever le vehicule de maniere securisee.',
-      'Retirer la roue.',
-      'Verifier l usure des plaquettes.',
-      'Reposer les nouvelles pieces et tester le freinage.'
-    ],
-    tools: ['Cric', 'Cle de roue', 'Gants'],
-    createdAt: new Date('2026-01-01T09:00:00.000Z'),
-    updatedAt: new Date('2026-01-01T09:00:00.000Z')
-  }
-];
-
-const QUALIFIED_TUTORIAL_VIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-function normalizeDate(value: Date | string | null | undefined) {
-  if (value instanceof Date) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
-    }
-  }
-
-  return new Date();
-}
-
-function ensureStringArray(value: unknown) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.filter((entry): entry is string => typeof entry === 'string');
-}
-
-function normalizeCategory(value: string | null | undefined): TutorialCategory {
-  const normalized = value?.toLowerCase();
-
-  switch (normalized) {
-    case 'freins':
-      return 'freins';
-    case 'suspension':
-      return 'suspension';
-    case 'batterie':
-    case 'battery':
-      return 'batterie';
-    case 'diagnostic':
-      return 'diagnostic';
-    case 'eclairage':
-    case 'lighting':
-      return 'eclairage';
-    case 'fluide':
-    case 'fluid':
-      return 'fluide';
-    case 'mecanique':
-    case 'mechanique':
-    case 'mechanic':
-      return 'mecanique';
-    case 'entretien':
-    case 'maintenance':
-    default:
-      return 'entretien';
-  }
-}
-
-function normalizeDifficulty(value: string | null | undefined): TutorialDifficulty {
-  const normalized = value?.toLowerCase();
-
-  switch (normalized) {
-    case 'easy':
-    case 'facile':
-      return 'facile';
-    case 'hard':
-    case 'difficile':
-      return 'difficile';
-    case 'medium':
-    case 'moyen':
-    default:
-      return 'moyen';
-  }
-}
-
-function normalizeDuration(duration: number | null | undefined) {
-  if (!Number.isFinite(duration)) {
-    return 0;
-  }
-
-  return Math.max(0, Math.round(Number(duration)));
-}
-
-function normalizeDurationFromSeconds(durationSec: number | null | undefined) {
-  if (!Number.isFinite(durationSec)) {
-    return 0;
-  }
-
-  return Math.max(1, Math.round(Number(durationSec) / 60));
-}
-
-function normalizeTutorialRating(value: unknown) {
-  const normalized = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
-
-  if (!Number.isInteger(normalized) || normalized < 1 || normalized > 5) {
-    throw new AppError('La note du tutoriel doit etre un entier entre 1 et 5.', 400);
-  }
-
-  return normalized;
-}
-
-function normalizeRequiredText(value: unknown, fieldName: string) {
-  if (typeof value !== 'string') {
-    throw new AppError(`${fieldName} est requis.`, 400);
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new AppError(`${fieldName} est requis.`, 400);
-  }
-
-  return trimmed;
-}
-
-function normalizePositiveInteger(value: unknown, fieldName: string) {
-  const normalized = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
-
-  if (!Number.isInteger(normalized) || normalized <= 0) {
-    throw new AppError(`${fieldName} doit etre un entier positif.`, 400);
-  }
-
-  return normalized;
-}
-
-function normalizeTutorialCategoryInput(value: unknown): TutorialCategory {
-  const normalized = String(value ?? '').trim().toLowerCase();
-
-  switch (normalized) {
-    case 'entretien':
-    case 'maintenance':
-      return 'entretien';
-    case 'freins':
-      return 'freins';
-    case 'suspension':
-      return 'suspension';
-    case 'batterie':
-    case 'battery':
-      return 'batterie';
-    case 'diagnostic':
-      return 'diagnostic';
-    case 'eclairage':
-    case 'lighting':
-      return 'eclairage';
-    case 'fluide':
-    case 'fluid':
-      return 'fluide';
-    case 'mecanique':
-    case 'mechanique':
-    case 'mechanic':
-      return 'mecanique';
-    default:
-      throw new AppError('La categorie du tutoriel est invalide.', 400);
-  }
-}
-
-function normalizeTutorialDifficultyInput(value: unknown): TutorialDifficulty {
-  const normalized = String(value ?? '').trim().toLowerCase();
-
-  switch (normalized) {
-    case 'facile':
-    case 'easy':
-      return 'facile';
-    case 'moyen':
-    case 'medium':
-      return 'moyen';
-    case 'difficile':
-    case 'hard':
-      return 'difficile';
-    default:
-      throw new AppError('La difficulte du tutoriel est invalide.', 400);
-  }
-}
-
-function normalizeStringList(
-  value: unknown,
-  fieldName: string,
-  options: { required?: boolean } = {}
-) {
-  if (!Array.isArray(value)) {
-    if (options.required) {
-      throw new AppError(`${fieldName} est requis.`, 400);
-    }
-
-    return [];
-  }
-
-  const normalized = value
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map(entry => entry.trim())
-    .filter(Boolean);
-
-  if (options.required && normalized.length === 0) {
-    throw new AppError(`${fieldName} est requis.`, 400);
-  }
-
-  return normalized;
-}
-
-function normalizeTutorialWritePayload(value: unknown): TutorialWritePayload {
-  const payload = value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-
-  return {
-    title: normalizeRequiredText(payload.title, 'Le titre du tutoriel'),
-    description: normalizeRequiredText(payload.description, 'La description du tutoriel'),
-    category: normalizeTutorialCategoryInput(payload.category),
-    difficulty: normalizeTutorialDifficultyInput(payload.difficulty),
-    duration: normalizePositiveInteger(payload.duration, 'La duree'),
-    thumbnail: normalizeRequiredText(payload.thumbnail, 'La miniature du tutoriel'),
-    videoUrl: normalizeRequiredText(payload.videoUrl, 'La video du tutoriel'),
-    instructions: normalizeStringList(payload.instructions, 'Au moins une instruction', { required: true }),
-    tools: normalizeStringList(payload.tools, 'Les outils')
-  };
-}
-
-function isPrismaValidationError(error: unknown): error is Prisma.PrismaClientValidationError {
-  return error instanceof Prisma.PrismaClientValidationError;
-}
-
-function isPrismaRecordNotFoundError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
-}
-
-function shouldCountQualifiedTutorialView(
-  lastViewedAt: Date | string | null | undefined,
-  reference: Date = new Date()
-) {
-  if (!(lastViewedAt instanceof Date)) {
-    return true;
-  }
-
-  if (Number.isNaN(lastViewedAt.getTime())) {
-    return true;
-  }
-
-  return reference.getTime() - lastViewedAt.getTime() >= QUALIFIED_TUTORIAL_VIEW_WINDOW_MS;
-}
-
-function cloneTutorial(tutorial: TutorialResponse): TutorialResponse {
-  return {
-    ...tutorial,
-    instructions: [...tutorial.instructions],
-    tools: [...tutorial.tools],
-    createdAt: new Date(tutorial.createdAt),
-    updatedAt: new Date(tutorial.updatedAt)
-  };
-}
-
-function mapCurrentTutorial(tutorial: {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  difficulty: string;
-  duration: number;
-  views: number;
-  rating: number;
-  thumbnail: string;
-  videoUrl: string;
-  instructions: unknown;
-  tools: unknown;
-  createdAt: Date;
-  updatedAt: Date;
-}): TutorialResponse {
-  return {
-    id: tutorial.id,
-    title: tutorial.title,
-    description: tutorial.description,
-    category: normalizeCategory(tutorial.category),
-    difficulty: normalizeDifficulty(tutorial.difficulty),
-    duration: normalizeDuration(tutorial.duration),
-    views: Math.max(0, tutorial.views ?? 0),
-    rating: Number.isFinite(tutorial.rating) ? tutorial.rating : 0,
-    thumbnail: tutorial.thumbnail || 'res://logo',
-    videoUrl: tutorial.videoUrl,
-    instructions: ensureStringArray(tutorial.instructions),
-    tools: ensureStringArray(tutorial.tools),
-    createdAt: tutorial.createdAt,
-    updatedAt: tutorial.updatedAt
-  };
-}
-
-function mapLegacyTutorial(row: LegacyTutorialRow): TutorialResponse {
-  const createdAt = normalizeDate(row.createdAt);
-
-  return {
-    id: row.id,
-    title: row.title,
-    description: 'Tutoriel atelier disponible sur cette deployment legacy.',
-    category: normalizeCategory(row.category),
-    difficulty: normalizeDifficulty(row.difficulty),
-    duration: normalizeDurationFromSeconds(row.durationSec),
-    views: 0,
-    rating: 0,
-    thumbnail: row.thumbnail || 'res://logo',
-    videoUrl: row.videoUrl || 'https://example.com/videos/tutorial',
-    instructions: [],
-    tools: [],
-    createdAt,
-    updatedAt: createdAt
-  };
-}
-
-async function readCurrentTutorials() {
-  const tutorials = await prisma.tutorial.findMany({
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      category: true,
-      difficulty: true,
-      duration: true,
-      views: true,
-      rating: true,
-      thumbnail: true,
-      videoUrl: true,
-      instructions: true,
-      tools: true,
-      createdAt: true,
-      updatedAt: true
-    }
-  });
-
-  return tutorials.map(tutorial => mapCurrentTutorial({
-    ...tutorial,
-    category: String(tutorial.category),
-    difficulty: String(tutorial.difficulty)
-  }));
-}
-
-async function readLegacyTutorials() {
-  const rows = await prisma.$queryRaw<LegacyTutorialRow[]>`
-    SELECT "id", "title", "category", "difficulty", "videoUrl", "thumbnail", "durationSec", "createdAt"
-    FROM "Tutorial"
-    ORDER BY "createdAt" DESC
-  `;
-
-  return rows.map(mapLegacyTutorial);
-}
-
-async function readTutorialCatalog() {
-  if (!(await isCurrentTutorialSchemaAvailable())) {
-    try {
-      return await readLegacyTutorials();
-    } catch (legacySchemaError) {
-      logger.error(
-        { err: legacySchemaError },
-        'Unable to read tutorials from legacy schema'
-      );
-      return FALLBACK_TUTORIALS.map(cloneTutorial);
-    }
-  }
-
-  try {
-    return await readCurrentTutorials();
-  } catch (currentSchemaError) {
-    if (!isSchemaDriftError(currentSchemaError)) {
-      logger.error({ err: currentSchemaError }, 'Unable to read tutorials from current schema');
-      return FALLBACK_TUTORIALS.map(cloneTutorial);
-    }
-
-    logger.warn({ err: currentSchemaError }, 'Falling back to legacy tutorial schema');
-
-    try {
-      return await readLegacyTutorials();
-    } catch (legacySchemaError) {
-      logger.error(
-        { err: legacySchemaError },
-        'Unable to read tutorials from current or legacy schema'
-      );
-      return FALLBACK_TUTORIALS.map(cloneTutorial);
-    }
-  }
-}
 
 export async function listTutorials(_req: Request, res: Response) {
   res.json(await readTutorialCatalog());
@@ -467,42 +36,15 @@ export async function listTutorials(_req: Request, res: Response) {
 
 export async function searchTutorials(req: Request, res: Response) {
   const tutorials = await readTutorialCatalog();
-  const query = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
-
-  if (!query) {
-    res.json(tutorials);
-    return;
-  }
-
-  res.json(
-    tutorials.filter(tutorial =>
-      tutorial.title.toLowerCase().includes(query) ||
-      tutorial.description.toLowerCase().includes(query) ||
-      tutorial.category.toLowerCase().includes(query) ||
-      tutorial.difficulty.toLowerCase().includes(query) ||
-      tutorial.instructions.some(instruction => instruction.toLowerCase().includes(query)) ||
-      tutorial.tools.some(tool => tool.toLowerCase().includes(query))
-    )
-  );
+  const query = typeof req.query.q === 'string' ? req.query.q : '';
+  res.json(searchTutorialCatalog(tutorials, query));
 }
 
 export async function createTutorial(req: Request, res: Response) {
   try {
-    const data = normalizeTutorialWritePayload(req.body);
+    const payload = normalizeTutorialWritePayload(req.body);
     const tutorial = await prisma.tutorial.create({
-      data: {
-        title: data.title,
-        description: data.description,
-        category: data.category,
-        difficulty: data.difficulty,
-        duration: data.duration,
-        thumbnail: data.thumbnail,
-        videoUrl: data.videoUrl,
-        instructions: data.instructions ?? [],
-        tools: data.tools ?? [],
-        views: 0,
-        rating: 0
-      }
+      data: buildTutorialCreateData(payload)
     });
 
     res.status(201).json(mapCurrentTutorial({
@@ -553,25 +95,14 @@ export async function updateTutorial(req: Request, res: Response) {
       return;
     }
 
-    const data = normalizeTutorialWritePayload(req.body);
-
+    const payload = normalizeTutorialWritePayload(req.body);
     const tutorial = await prisma.tutorial.update({
       where: { id },
-      data: {
-        title: data.title,
-        description: data.description,
-        category: data.category,
-        difficulty: data.difficulty,
-        duration: data.duration,
-        thumbnail: data.thumbnail,
-        videoUrl: data.videoUrl,
-        instructions: data.instructions ?? undefined,
-        tools: data.tools ?? undefined
-      }
+      data: buildTutorialUpdateData(payload)
     });
 
     if (
-      existingTutorial?.videoUrl &&
+      existingTutorial.videoUrl &&
       !areSameManagedTutorialVideoUrl(existingTutorial.videoUrl, tutorial.videoUrl)
     ) {
       try {
@@ -626,7 +157,7 @@ export async function deleteTutorial(req: Request, res: Response) {
 
     await prisma.tutorial.delete({ where: { id } });
 
-    if (existingTutorial?.videoUrl) {
+    if (existingTutorial.videoUrl) {
       try {
         await removeManagedTutorialVideoByUrl(existingTutorial.videoUrl);
       } catch (cleanupError) {
@@ -650,9 +181,10 @@ export async function deleteTutorial(req: Request, res: Response) {
 }
 
 export async function getTutorialsByCategory(req: Request, res: Response) {
-  const { category } = req.params;
   const tutorials = await readTutorialCatalog();
-  res.json(tutorials.filter(tutorial => tutorial.category === normalizeCategory(category)));
+  res.json(
+    tutorials.filter(tutorial => tutorial.category === normalizeTutorialCategory(req.params.category))
+  );
 }
 
 export async function getPopularTutorials(req: Request, res: Response) {
@@ -811,8 +343,8 @@ export async function rateTutorial(req: Request, res: Response) {
 export const __tutorialControllerInternals = {
   normalizeDate,
   ensureStringArray,
-  normalizeCategory,
-  normalizeDifficulty,
+  normalizeCategory: normalizeTutorialCategory,
+  normalizeDifficulty: normalizeTutorialDifficulty,
   normalizeDuration,
   normalizeDurationFromSeconds,
   normalizeTutorialRating,
