@@ -1,4 +1,9 @@
-import { ReservationStatus, Role, TutorialCategory, TutorialDifficulty } from '@prisma/client';
+import {
+  ReservationStatus,
+  Role,
+  TutorialCategory as PrismaTutorialCategory,
+  TutorialDifficulty as PrismaTutorialDifficulty
+} from '@prisma/client';
 import { Request, Response } from 'express';
 import { env } from '../../config/env';
 import { logger } from '../../config/logger';
@@ -16,6 +21,10 @@ import {
   buildTutorialUploadPublicPath,
   removeTutorialVideoFileByFilename
 } from '../tutorials/tutorialMedia';
+import {
+  resolveTutorialCategory,
+  resolveTutorialDifficulty
+} from '../tutorials/tutorials.normalization';
 
 type AdminSummaryPayload = {
   metrics: {
@@ -88,8 +97,8 @@ type AdminTutorialPayload = {
   id: string;
   title: string;
   description: string;
-  category: TutorialCategory;
-  difficulty: TutorialDifficulty;
+  category: PrismaTutorialCategory;
+  difficulty: PrismaTutorialDifficulty;
   duration: number;
   views: number;
   rating: number;
@@ -231,38 +240,12 @@ function normalizeServiceDraft(body: unknown) {
   };
 }
 
-function normalizeTutorialCategory(value: unknown): TutorialCategory {
-  switch (normalizeTrimmedString(value).toLowerCase()) {
-    case 'freins':
-      return TutorialCategory.freins;
-    case 'suspension':
-      return TutorialCategory.suspension;
-    case 'batterie':
-      return TutorialCategory.batterie;
-    case 'diagnostic':
-      return TutorialCategory.diagnostic;
-    case 'eclairage':
-      return TutorialCategory.eclairage;
-    case 'fluide':
-      return TutorialCategory.fluide;
-    case 'mecanique':
-      return TutorialCategory.mecanique;
-    case 'entretien':
-    default:
-      return TutorialCategory.entretien;
-  }
+function normalizeTutorialCategory(value: unknown): PrismaTutorialCategory {
+  return (resolveTutorialCategory(normalizeTrimmedString(value)) ?? 'entretien') as PrismaTutorialCategory;
 }
 
-function normalizeTutorialDifficulty(value: unknown): TutorialDifficulty {
-  switch (normalizeTrimmedString(value).toLowerCase()) {
-    case 'difficile':
-      return TutorialDifficulty.difficile;
-    case 'moyen':
-      return TutorialDifficulty.moyen;
-    case 'facile':
-    default:
-      return TutorialDifficulty.facile;
-  }
+function normalizeTutorialDifficulty(value: unknown): PrismaTutorialDifficulty {
+  return (resolveTutorialDifficulty(normalizeTrimmedString(value)) ?? 'facile') as PrismaTutorialDifficulty;
 }
 
 const adminUserSelect = {
@@ -314,8 +297,8 @@ function mapAdminTutorial(tutorial: {
   id: string;
   title: string;
   description: string;
-  category: TutorialCategory;
-  difficulty: TutorialDifficulty;
+  category: PrismaTutorialCategory;
+  difficulty: PrismaTutorialDifficulty;
   duration: number;
   views: number;
   rating: number;
