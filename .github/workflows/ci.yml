@@ -13,6 +13,7 @@ jobs:
     env:
       CI_DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_db?schema=public
       DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_db?schema=public
+      JWT_SECRET: ci-jwt-secret
     services:
       postgres:
         image: postgres:16
@@ -91,6 +92,7 @@ jobs:
     env:
       CI_DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_db?schema=public
       DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_db?schema=public
+      JWT_SECRET: ci-jwt-secret
     services:
       postgres:
         image: postgres:16

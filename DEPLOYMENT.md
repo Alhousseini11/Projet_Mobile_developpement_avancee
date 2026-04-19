@@ -28,14 +28,23 @@ mkdir -p deploy/certs
 
 Remplacer dans `.env.prod` :
 
+- `POSTGRES_DB`
+- `POSTGRES_USER`
 - `POSTGRES_PASSWORD`
-- `DATABASE_URL`
+- `DATABASE_URL` avec l'URL PostgreSQL du conteneur `postgres`
 
 Remplacer dans `backend/.env.prod` :
 
-- `DATABASE_URL`
 - `JWT_SECRET`
 - les cles Stripe, AWS et Google si necessaire
+- `PASSWORD_RESET_URL` et `PUBLIC_BASE_URL` si exposes publiquement
+
+Le Dockerfile backend ne fournit plus aucune valeur sensible par defaut :
+
+- l'image de build utilise uniquement une URL Prisma factice non sensible pour `prisma generate`
+- la vraie `DATABASE_URL` doit etre injectee au runtime par `docker compose` via `.env.prod`
+- si `DATABASE_URL` ou `JWT_SECRET` manquent au runtime en production, le backend echoue explicitement au demarrage
+- `DEMO_MODE` est desactive par defaut et doit rester a `false` en production
 
 Remplacer dans `deploy/nginx/conf.d/backend.conf` :
 

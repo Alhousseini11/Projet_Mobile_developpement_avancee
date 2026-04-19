@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import type { Request } from 'express';
 import { Role, type User } from '../../data/prisma/generatedClient';
 import { DEMO_ACCOUNT, isDemoModeEnabled } from '../../config/demo';
-import { env } from '../../config/env';
+import { env, requireEnv } from '../../config/env';
 import { prisma } from '../../data/prisma/client';
 import { AppError } from '../../shared/errors';
 import { isPasswordResetEmailEnabled, sendPasswordResetEmail } from './passwordResetMailer';
@@ -101,10 +101,14 @@ function base64UrlDecode(value: string) {
   return Buffer.from(`${normalized}${padding}`, 'base64').toString('utf8');
 }
 
+function getJwtSecret() {
+  return requireEnv('JWT_SECRET');
+}
+
 function signToken(payload: SignedTokenPayload) {
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signature = crypto
-    .createHmac('sha256', env.JWT_SECRET)
+    .createHmac('sha256', getJwtSecret())
     .update(encodedPayload)
     .digest('base64url');
 
@@ -119,7 +123,7 @@ function verifySignedToken(token: string, expectedType: TokenType) {
   }
 
   const expectedSignature = crypto
-    .createHmac('sha256', env.JWT_SECRET)
+    .createHmac('sha256', getJwtSecret())
     .update(encodedPayload)
     .digest('base64url');
 
@@ -167,7 +171,7 @@ function generateResetCode() {
 
 function hashResetCode(userId: string, code: string) {
   return crypto
-    .createHmac('sha256', env.JWT_SECRET)
+    .createHmac('sha256', getJwtSecret())
     .update(`${userId}:${code}`)
     .digest('hex');
 }

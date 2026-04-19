@@ -50,6 +50,9 @@ Le conteneur backend garde le workflow existant et execute :
 npx prisma migrate deploy && node dist/server.js
 ```
 
+La vraie `DATABASE_URL` est injectee au runtime par Docker Compose. Le Dockerfile n'embarque
+plus aucun identifiant de base de donnees.
+
 En plus, le backend lance un preflight Prisma au demarrage. Il refuse de se lancer si :
 
 - la table `_prisma_migrations` est absente

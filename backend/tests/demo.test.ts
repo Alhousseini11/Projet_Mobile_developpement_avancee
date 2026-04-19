@@ -7,8 +7,8 @@ test('normalizeEmail trims and lowercases email addresses', () => {
   assert.equal(normalizeEmail(undefined), '');
 });
 
-test('isDemoUserEmail recognizes the configured demo account email', () => {
-  assert.equal(isDemoUserEmail(DEMO_ACCOUNT.email), true);
-  assert.equal(isDemoUserEmail('  ALEX.MARTIN@EXAMPLE.COM '), true);
+test('isDemoUserEmail stays disabled while demo mode is off by default', () => {
+  assert.equal(isDemoUserEmail(DEMO_ACCOUNT.email), false);
+  assert.equal(isDemoUserEmail('  ALEX.MARTIN@EXAMPLE.COM '), false);
   assert.equal(isDemoUserEmail('client@example.com'), false);
 });
