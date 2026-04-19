@@ -1,4 +1,4 @@
-import { Prisma, ReservationStatus as PrismaReservationStatus } from '@prisma/client';
+import { Prisma, ReservationStatus as PrismaReservationStatus } from '../../data/prisma/generatedClient';
 import { Request, Response } from 'express';
 import { isDemoUserEmail, normalizeEmail } from '../../config/demo';
 import { prisma } from '../../data/prisma/client';

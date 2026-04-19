@@ -45,10 +45,16 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: npm run prisma:generate
 
       - name: Validate Prisma schema
         run: npm run prisma:validate
+
+      - name: Apply Prisma migrations on clean CI database
+        run: npm run prisma:migrate:deploy
+
+      - name: Verify Prisma database readiness
+        run: npm run prisma:check
 
       - name: Build backend
         run: npm run build
@@ -117,10 +123,16 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: npm run prisma:generate
 
       - name: Validate Prisma schema
         run: npm run prisma:validate
+
+      - name: Apply Prisma migrations on clean CI database
+        run: npm run prisma:migrate:deploy
+
+      - name: Verify Prisma database readiness
+        run: npm run prisma:check
 
       - name: Run backend coverage
         run: npm run test:coverage:ci

@@ -9,6 +9,7 @@ Commandes utiles :
 
 - Frontend : `cd frontend && npm install && npm run android`
 - Backend : `cd backend && npm install && npm run dev`
+- Workflow Prisma backend : `backend/PRISMA_WORKFLOW.md`
 
 Conteneurisation du backend :
 

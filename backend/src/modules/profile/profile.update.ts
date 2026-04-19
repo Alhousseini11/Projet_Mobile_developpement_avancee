@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../data/prisma/generatedClient';
 import type { AuthenticatedUser } from '../auth/auth.service';
 import { hasOwnProperty, normalizeOptionalText } from './profile.shared';
 

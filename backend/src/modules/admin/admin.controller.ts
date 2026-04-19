@@ -3,7 +3,7 @@ import {
   Role,
   TutorialCategory as PrismaTutorialCategory,
   TutorialDifficulty as PrismaTutorialDifficulty
-} from '@prisma/client';
+} from '../../data/prisma/generatedClient';
 import { Request, Response } from 'express';
 import { env } from '../../config/env';
 import { logger } from '../../config/logger';

@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import '../../config/env';
+import { PrismaClient } from './generatedClient';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 
@@ -11,3 +12,8 @@ const adapter = new PrismaPg(prismaPool);
 export const prisma = new PrismaClient({
   adapter,
 });
+
+export async function disconnectPrisma() {
+  await prisma.$disconnect().catch(() => undefined);
+  await prismaPool.end().catch(() => undefined);
+}

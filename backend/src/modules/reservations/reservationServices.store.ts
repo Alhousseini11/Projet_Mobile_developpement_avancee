@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../data/prisma/generatedClient';
 import { prisma } from '../../data/prisma/client';
 import {
   DEFAULT_RESERVATION_SERVICE_DEFINITIONS,

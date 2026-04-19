@@ -1,4 +1,4 @@
-import { Role } from '@prisma/client';
+import { Role } from '../../data/prisma/generatedClient';
 import { Router } from 'express';
 import { authGuard } from '../../core/http/middleware/authGuard';
 import { roleGuard } from '../../core/http/middleware/roleGuard';

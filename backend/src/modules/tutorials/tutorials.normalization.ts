@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../data/prisma/generatedClient';
 import { AppError } from '../../shared/errors';
 import type { TutorialCategory, TutorialDifficulty } from './tutorial.contracts';
 

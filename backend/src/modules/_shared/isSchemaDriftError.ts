@@ -1,5 +1,9 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../data/prisma/generatedClient';
 
 export function isSchemaDriftError(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2022';
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  return error.code === 'P2022';
 }
