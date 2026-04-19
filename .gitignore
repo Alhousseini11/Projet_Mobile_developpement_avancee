@@ -50,6 +50,9 @@ backend/uploads/tutorials/*
 !backend/uploads/tutorials/.gitkeep
 frontend/.env
 frontend/.env.*
+!frontend/.env.local.example
+!frontend/.env.shared-vps.example
+!frontend/.env.prod.example
 deploy/certs/*
 !deploy/certs/.gitkeep
 deploy/nginx/conf.d/backend.conf

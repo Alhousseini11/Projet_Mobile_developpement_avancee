@@ -7,9 +7,22 @@ Le projet est maintenant separe en deux dossiers principaux :
 
 Commandes utiles :
 
-- Frontend : `cd frontend && npm install && npm run android`
+- Frontend : `cd frontend && npm install && npm run android:local`
 - Backend : `cd backend && npm install && npm run dev`
 - Workflow Prisma backend : `backend/PRISMA_WORKFLOW.md`
+
+Configuration frontend mobile :
+
+- `frontend/app/utils/api.ts` ne contient plus de fallback implicite vers le VPS.
+- `NS_API_BASE_URL` doit etre configure explicitement pour chaque contexte.
+- Exemples versionnes :
+  - `frontend/.env.local.example`
+  - `frontend/.env.shared-vps.example`
+  - `frontend/.env.prod.example`
+- Scripts explicites :
+  - local : `npm run android:local` / `npm run ios:local`
+  - VPS partage : `npm run android:shared-vps` / `npm run ios:shared-vps`
+  - build prod : `npm run build:android:prod` / `npm run build:ios:prod`
 
 Conteneurisation du backend :
 
