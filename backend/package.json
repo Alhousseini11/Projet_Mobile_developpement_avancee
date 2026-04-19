@@ -18,7 +18,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:status": "prisma migrate status",
-    "prisma:check": "ts-node src/data/prisma/databaseReadiness.ts",
+    "prisma:check": "node scripts/prisma-check.js",
     "prisma:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
