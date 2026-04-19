@@ -10,8 +10,8 @@ Important :
 - vous pouvez travailler uniquement sur le frontend
 
 Verification dans le projet :
-- ouvrez `frontend/app/utils/api.ts`
-- verifiez que `API_BASE_URL` vaut `http://167.99.178.126:3000/api`
+- dans `frontend/`, copiez `.env.shared-vps.example` vers `.env.shared-vps`
+- lancez `npm run android:shared-vps`
 
 Compte demo :
 - email : alex.martin@example.com

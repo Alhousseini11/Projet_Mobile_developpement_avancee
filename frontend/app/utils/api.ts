@@ -1,6 +1,18 @@
 import { clearStoredSession, getStoredAccessToken } from '@/utils/authStorage'
 
-function getConfiguredApiBaseUrl() {
+function createMissingApiBaseUrlError() {
+  return new Error(
+    [
+      '[API_CONFIG] NS_API_BASE_URL is not configured.',
+      'Choose an explicit frontend environment:',
+      '- local backend: create frontend/.env.local and run npm run android:local or npm run ios:local',
+      '- shared VPS: create frontend/.env.shared-vps and run npm run android:shared-vps or npm run ios:shared-vps',
+      '- production build: create frontend/.env.prod and run the production build script'
+    ].join(' ')
+  )
+}
+
+function readApiBaseUrlEnv() {
   if (
     typeof process !== 'undefined' &&
     process &&
@@ -12,7 +24,43 @@ function getConfiguredApiBaseUrl() {
     return process.env.NS_API_BASE_URL.trim()
   }
 
-  return 'http://167.99.178.126:3000/api'
+  return ''
+}
+
+function normalizeApiBaseUrl(rawValue: string) {
+  let parsedUrl: URL
+
+  try {
+    parsedUrl = new URL(rawValue)
+  } catch {
+    throw new Error(
+      `[API_CONFIG] NS_API_BASE_URL must be an absolute URL. Received "${rawValue}".`
+    )
+  }
+
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    throw new Error(
+      `[API_CONFIG] NS_API_BASE_URL must use http or https. Received "${rawValue}".`
+    )
+  }
+
+  parsedUrl.hash = ''
+  parsedUrl.search = ''
+
+  const normalizedPath = parsedUrl.pathname.replace(/\/+$/, '')
+  parsedUrl.pathname = !normalizedPath || normalizedPath === '/' ? '/api' : normalizedPath
+
+  return parsedUrl.toString().replace(/\/+$/, '')
+}
+
+function getConfiguredApiBaseUrl() {
+  const configuredValue = readApiBaseUrlEnv()
+
+  if (!configuredValue) {
+    throw createMissingApiBaseUrlError()
+  }
+
+  return normalizeApiBaseUrl(configuredValue)
 }
 
 const API_BASE_URL = getConfiguredApiBaseUrl()

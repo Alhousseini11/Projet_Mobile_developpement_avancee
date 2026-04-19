@@ -37,17 +37,20 @@ Dans ce cas, chacun doit lancer son backend local avec sa propre `DATABASE_URL`.
 
 ## Configuration dans le frontend
 
-Dans le projet, verifiez que le fichier `frontend/app/utils/api.ts` contient :
+Le frontend mobile ne doit plus etre modifie a la main pour changer l'URL API.
+Copiez plutot l'exemple VPS partage puis utilisez le script npm dedie :
 
-```ts
-const API_BASE_URL = 'http://167.99.178.126:3000/api'
+```bash
+cd frontend
+cp .env.shared-vps.example .env.shared-vps
+npm run android:shared-vps
 ```
 
 ## Etapes pour un collegue
 
 1. Recuperer le projet depuis GitHub.
 2. Installer les dependances du frontend.
-3. Verifier que `frontend/app/utils/api.ts` pointe vers le VPS.
+3. Copier `frontend/.env.shared-vps.example` vers `frontend/.env.shared-vps`.
 4. Lancer seulement le frontend.
 
 Exemple :
@@ -56,7 +59,8 @@ Exemple :
 git clone <url-du-repo>
 cd Projet_Mobile_developpement_avancee/frontend
 npm install
-npm run android
+cp .env.shared-vps.example .env.shared-vps
+npm run android:shared-vps
 ```
 
 ## Verification rapide

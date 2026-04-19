@@ -41,6 +41,7 @@ app/
 - `app/types/*` is the source of truth for frontend DTO shapes.
 - `app/services/*` must depend on `app/types/*`, not redefine contracts locally.
 - `app/components/*` should stay focused on rendering and user interactions.
+- `NS_API_BASE_URL` must be configured explicitly per environment. No hardcoded VPS fallback is allowed in frontend code.
 
 ## Backend structure
 
