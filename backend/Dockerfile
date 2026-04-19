@@ -6,8 +6,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 FROM deps AS build
-ARG DATABASE_URL=postgresql://mon_user:Al98970071@postgres:5432/mon_app?schema=public
-ENV DATABASE_URL=$DATABASE_URL
+ENV DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public
 COPY tsconfig.json prisma.config.ts ./
 COPY prisma ./prisma
 COPY src ./src
@@ -17,8 +16,6 @@ RUN npm run build
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-ARG DATABASE_URL=postgresql://mon_user:Al98970071@postgres:5432/mon_app?schema=public
-ENV DATABASE_URL=$DATABASE_URL
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
@@ -29,4 +26,4 @@ COPY package.json package-lock.json ./
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "if [ -z \"$DATABASE_URL\" ]; then echo >&2 \"DATABASE_URL must be provided at runtime\"; exit 1; fi; npx prisma migrate deploy && node dist/server.js"]

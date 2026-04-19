@@ -1,11 +1,20 @@
-import { createHttpApp } from './core/http/createHttpApp';
-import { env } from './config/env';
+import { env, validateRuntimeEnv } from './config/env';
 import { logger } from './config/logger';
-import { disconnectPrisma } from './data/prisma/client';
-import { assertDatabaseIsReady } from './data/prisma/databaseReadiness';
 
 async function startServer() {
+  let disconnectPrisma: (() => Promise<void>) | null = null;
+
   try {
+    validateRuntimeEnv();
+
+    const [{ createHttpApp }, prismaClientModule, { assertDatabaseIsReady }] = await Promise.all([
+      import('./core/http/createHttpApp'),
+      import('./data/prisma/client'),
+      import('./data/prisma/databaseReadiness')
+    ]);
+
+    disconnectPrisma = prismaClientModule.disconnectPrisma;
+
     await assertDatabaseIsReady();
 
     const app = createHttpApp();
@@ -13,8 +22,10 @@ async function startServer() {
       logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, 'Garage Mechanic API running');
     });
   } catch (error) {
-    logger.fatal({ err: error }, 'Database compatibility preflight failed; backend will not start');
-    await disconnectPrisma();
+    logger.fatal({ err: error }, 'Backend startup checks failed; backend will not start');
+    if (disconnectPrisma) {
+      await disconnectPrisma();
+    }
     process.exit(1);
   }
 }

@@ -17,6 +17,7 @@ process.env.SENDGRID_API_KEY = '';
 process.env.SENDGRID_FROM_EMAIL = '';
 process.env.SENDGRID_FROM_NAME = '';
 process.env.PASSWORD_RESET_URL = 'http://localhost:3000/reset-password';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 
 const baseDatabaseUrl = process.env.DATABASE_URL ?? '';
 const canRunIntegration = baseDatabaseUrl.trim().length > 0;
