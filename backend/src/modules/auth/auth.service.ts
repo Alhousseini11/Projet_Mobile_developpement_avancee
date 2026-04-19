@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import type { Request } from 'express';
-import { Role, type User } from '@prisma/client';
+import { Role, type User } from '../../data/prisma/generatedClient';
 import { DEMO_ACCOUNT, isDemoModeEnabled } from '../../config/demo';
 import { env } from '../../config/env';
 import { prisma } from '../../data/prisma/client';

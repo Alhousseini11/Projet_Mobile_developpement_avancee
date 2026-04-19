@@ -1708,7 +1708,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
       body: {
         serviceId: 'brakes',
         vehicleId: firstVehicleResult.payload?.id,
-        date: '2026-04-18',
+        date: '2099-04-18',
         time: '11:30',
         notes: 'Reservation pour notifications'
       }

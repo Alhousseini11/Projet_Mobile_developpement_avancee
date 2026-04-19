@@ -1,4 +1,4 @@
-import { Role } from '@prisma/client';
+import { Role } from '../../data/prisma/generatedClient';
 import type { Request } from 'express';
 import { DEMO_ACCOUNT } from '../../config/demo';
 import { prisma } from '../../data/prisma/client';

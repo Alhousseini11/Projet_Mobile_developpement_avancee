@@ -20,7 +20,7 @@ async function tableHasColumns(tableName: string, requiredColumns: string[]) {
           AND "table_name" = ${tableName}
       `;
 
-      const columns = new Set(rows.map(row => row.column_name));
+      const columns = new Set(rows.map((row: { column_name: string }) => row.column_name));
       return sortedColumns.every(column => columns.has(column));
     } catch {
       return false;

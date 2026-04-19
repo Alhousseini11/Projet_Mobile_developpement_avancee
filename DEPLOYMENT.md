@@ -73,7 +73,13 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f backend
 docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f nginx
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec backend npm run prisma:status
 ```
+
+Le backend conserve le workflow Docker actuel: le conteneur lance `prisma migrate deploy` avant `node dist/server.js`.
+Au demarrage, l'application verifie aussi que toutes les migrations versionnees du repo sont appliquees
+et que les tables/colonnes attendues par Prisma existent vraiment. Si ce preflight echoue, le backend
+refuse de demarrer au lieu de crasher plus tard au premier acces a une colonne manquante.
 
 ## 7. Mise a jour
 
@@ -81,6 +87,17 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f nginx
 git pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
+
+Si le backend ne redemarre pas apres une mise a jour, verifier en priorite :
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs backend
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec backend npm run prisma:status
+```
+
+En production, la correction par defaut est de redeployer le code avec ses migrations versionnees
+et de laisser `prisma migrate deploy` les appliquer. Ne pas utiliser `prisma db push` comme
+solution de production.
 
 ## 8. Sauvegarde base de donnees
 

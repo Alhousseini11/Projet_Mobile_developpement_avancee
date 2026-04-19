@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Prisma, ReservationStatus, Role } from '@prisma/client';
+import { Prisma, ReservationStatus, Role } from '../src/data/prisma/generatedClient';
 import { env } from '../src/config/env';
 import { __homeControllerInternals } from '../src/modules/home/home.controller';
 import { __vehicleControllerInternals } from '../src/modules/vehicles/vehicles.controller';

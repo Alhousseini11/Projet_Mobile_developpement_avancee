@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Role } from '@prisma/client';
+import { Role } from '../src/data/prisma/generatedClient';
 import { roleGuard } from '../src/core/http/middleware/roleGuard';
 
 function createResponse(authUser?: { role: Role }) {

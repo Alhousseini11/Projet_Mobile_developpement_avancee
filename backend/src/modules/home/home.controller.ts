@@ -1,4 +1,4 @@
-import { ReservationStatus } from '@prisma/client';
+import { ReservationStatus } from '../../data/prisma/generatedClient';
 import { Request, Response } from 'express';
 import { logger } from '../../config/logger';
 import { prisma } from '../../data/prisma/client';

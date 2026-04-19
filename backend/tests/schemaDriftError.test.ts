@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../src/data/prisma/generatedClient';
 import { isSchemaDriftError } from '../src/modules/_shared/isSchemaDriftError';
 
 function createKnownRequestError(code: string) {

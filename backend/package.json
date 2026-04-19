@@ -12,10 +12,13 @@
     "test:coverage:ci": "npm run test:build && node --experimental-test-coverage --test-coverage-include=dist-test/src/**/*.js --test-coverage-exclude=dist-test/src/**/*.routes.js --test-coverage-exclude=dist-test/src/modules/chat/**/*.js --test-coverage-exclude=dist-test/src/modules/emergency/**/*.js --test-coverage-exclude=dist-test/src/modules/estimation/**/*.js --test-coverage-exclude=dist-test/src/modules/location/**/*.js --test-coverage-exclude=dist-test/src/config/env.js --test-coverage-exclude=dist-test/src/data/stripe/stripeClient.js --test-coverage-lines=80 --test-coverage-functions=90 --test-coverage-branches=75 --test dist-test/tests/*.test.js",
     "start": "node dist/server.js",
     "lint": "eslint .",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
+    "prisma:migrate": "npm run prisma:migrate:dev",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:status": "prisma migrate status",
+    "prisma:check": "ts-node src/data/prisma/databaseReadiness.ts",
     "prisma:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
