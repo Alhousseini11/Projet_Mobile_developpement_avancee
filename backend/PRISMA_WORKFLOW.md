@@ -15,6 +15,9 @@
 - `npm run prisma:status`
 - `npm run prisma:check`
 
+`prisma:check` utilise `src/` en local et en CI, puis bascule automatiquement sur `dist/`
+dans l'image Docker de production.
+
 ## Developpement local
 
 1. Modifier `prisma/schema.prisma`.
