@@ -2,27 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Prisma, ReservationStatus, Role } from '../src/data/prisma/generatedClient';
 import { env } from '../src/config/env';
-import { __homeControllerInternals } from '../src/modules/home/home.controller';
+import { __homeServiceInternals } from '../src/modules/home/home.service';
 import { __vehicleControllerInternals } from '../src/modules/vehicles/vehicles.controller';
 import { __tutorialControllerInternals } from '../src/modules/tutorials/tutorials.controller';
 import { __reservationsControllerInternals } from '../src/modules/reservations/reservations.controller';
 import { __profileControllerInternals } from '../src/modules/profile/profile.controller';
 
-test('home controller internals normalize display and reminder content', () => {
-  assert.equal(__homeControllerInternals.getFirstName(undefined), 'Alex');
-  assert.equal(__homeControllerInternals.getFirstName('  Jean Dupont  '), 'Jean');
+test('home service internals normalize display and reminder content', () => {
+  assert.equal(__homeServiceInternals.getFirstName(undefined), 'Alex');
+  assert.equal(__homeServiceInternals.getFirstName('  Jean Dupont  '), 'Jean');
   assert.equal(
-    __homeControllerInternals.capitalizeWords('oil-change_fast-track'),
+    __homeServiceInternals.capitalizeWords('oil-change_fast-track'),
     'Oil Change Fast Track'
   );
 
-  const formattedDate = __homeControllerInternals.formatAppointmentDate(
+  const formattedDate = __homeServiceInternals.formatAppointmentDate(
     new Date(2026, 2, 24, 13, 5, 0)
   );
   assert.match(formattedDate, /24 mars/i);
   assert.match(formattedDate, /13h05/);
 
-  assert.deepEqual(__homeControllerInternals.buildDefaultFeed('Alex'), {
+  assert.deepEqual(__homeServiceInternals.buildDefaultFeed('Alex'), {
     displayName: 'Alex',
     nextAppointmentLabel: 'Aucun rendez-vous planifie pour le moment.',
     promoMessage: 'Promos: 20% sur les freins cette semaine.',
@@ -30,14 +30,14 @@ test('home controller internals normalize display and reminder content', () => {
   });
 
   assert.match(
-    __homeControllerInternals.buildReminderMessage({
+    __homeServiceInternals.buildReminderMessage({
       reminderTitle: 'Verifier la pression',
       reminderDueAt: new Date(2026, 2, 25, 9, 30, 0)
     }),
     /Verifier la pression/
   );
   assert.match(
-    __homeControllerInternals.buildReminderMessage({
+    __homeServiceInternals.buildReminderMessage({
       vehicleName: 'Honda',
       vehicleModel: 'Civic',
       vehicleMileage: 23500
@@ -45,7 +45,7 @@ test('home controller internals normalize display and reminder content', () => {
     /Honda Civic/
   );
   assert.match(
-    __homeControllerInternals.buildReminderMessage({}),
+    __homeServiceInternals.buildReminderMessage({}),
     /Consultez vos vehicules/i
   );
 });
