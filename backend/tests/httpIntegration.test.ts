@@ -714,7 +714,6 @@ runIntegrationTest('security middleware rejects oversized JSON payloads with HTT
   assert.equal(oversizedPayloadResult.response.status, 413);
   assert.ok(oversizedPayloadResult.payload?.message);
 });
-
 runIntegrationTest('home feed stays valid with an invalid optional auth token', async () => {
   const homeResult = await apiRequest<{
     displayName: string;
