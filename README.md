@@ -37,6 +37,10 @@ Variables attendues :
 - `./.env` : variables Docker Compose locales (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DATABASE_URL` vers `postgres:5432`)
 - `backend/.env` : variables backend pour `npm run dev` et `npm test` (`DATABASE_URL` vers `localhost:5433`, `JWT_SECRET`, puis les integrations optionnelles)
 - `DEMO_MODE` est desactive par defaut. Active-le explicitement en local seulement si tu veux exposer le compte de demo.
+- `CORS_ALLOWED_ORIGINS` : liste separee par des virgules des origines navigateur autorisees. En prod, renseigne-la explicitement pour l'admin web ou tout autre client navigateur.
+- `TRUST_PROXY` : mettre `1` si le backend est derriere Nginx ou un load balancer afin d'utiliser la vraie IP client pour les logs et le rate limit.
+- `HTTP_JSON_LIMIT` : taille max acceptee pour les payloads JSON et formulaires URL-encoded.
+- `AUTH_RATE_LIMIT_*` : garde-fous minimaux sur `register`, `login`, `forgot-password`, `reset-password` et le formulaire HTML de reset. Actifs par defaut en production, desactives par defaut en local.
 
 Production :
 

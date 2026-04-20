@@ -136,13 +136,15 @@ async function apiRequest<T = unknown>(
     method?: string;
     token?: string;
     body?: unknown;
+    headers?: Record<string, string>;
   } = {}
 ) {
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       ...(options.body ? { 'content-type': 'application/json' } : {}),
-      ...(options.token ? { authorization: `Bearer ${options.token}` } : {})
+      ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
+      ...(options.headers ?? {})
     },
     body: options.body ? JSON.stringify(options.body) : undefined
   });
@@ -158,13 +160,15 @@ async function rawRequest(
     method?: string;
     token?: string;
     body?: unknown;
+    headers?: Record<string, string>;
   } = {}
 ) {
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       ...(options.body ? { 'content-type': 'application/json' } : {}),
-      ...(options.token ? { authorization: `Bearer ${options.token}` } : {})
+      ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
+      ...(options.headers ?? {})
     },
     body: options.body ? JSON.stringify(options.body) : undefined
   });
@@ -562,7 +566,11 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
         status: 'up' | 'down';
       };
     };
-  }>('/health');
+  }>('/health', {
+    headers: {
+      origin: 'http://localhost:8080'
+    }
+  });
   assert.equal(healthResult.response.status, 200);
   assert.equal(healthResult.payload?.ok, true);
   assert.equal(healthResult.payload?.status, 'ok');
@@ -572,6 +580,9 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
   assert.equal(healthResult.payload?.checks.app.status, 'up');
   assert.equal(healthResult.payload?.checks.db.status, 'up');
   assert.ok(healthResult.response.headers.get('x-request-id'));
+  assert.equal(healthResult.response.headers.get('access-control-allow-origin'), 'http://localhost:8080');
+  assert.equal(healthResult.response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(healthResult.response.headers.get('x-frame-options'), 'SAMEORIGIN');
 
   const homeResult = await apiRequest<{
     displayName: string;
@@ -689,6 +700,19 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
 
   assert.equal(loginAfterResetResult.response.status, 200);
   assert.equal(loginAfterResetResult.payload?.user.email, session.email);
+});
+
+runIntegrationTest('security middleware rejects oversized JSON payloads with HTTP 413', async () => {
+  const oversizedPayloadResult = await apiRequest<{ message: string }>('/api/auth/login', {
+    method: 'POST',
+    body: {
+      email: `${'a'.repeat(1_100_000)}@example.com`,
+      password: 'Garage123!'
+    }
+  });
+
+  assert.equal(oversizedPayloadResult.response.status, 413);
+  assert.ok(oversizedPayloadResult.payload?.message);
 });
 
 runIntegrationTest('home feed stays valid with an invalid optional auth token', async () => {
