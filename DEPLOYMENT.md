@@ -38,6 +38,8 @@ Remplacer dans `backend/.env.prod` :
 - `JWT_SECRET`
 - les cles Stripe, AWS et Google si necessaire
 - `PASSWORD_RESET_URL` et `PUBLIC_BASE_URL` si exposes publiquement
+- `CORS_ALLOWED_ORIGINS` avec les origines navigateur autorisees, par exemple `https://admin.example.com`
+- `TRUST_PROXY=1` si le backend est derriere Nginx
 
 Le Dockerfile backend ne fournit plus aucune valeur sensible par defaut :
 
@@ -45,6 +47,8 @@ Le Dockerfile backend ne fournit plus aucune valeur sensible par defaut :
 - la vraie `DATABASE_URL` doit etre injectee au runtime par `docker compose` via `.env.prod`
 - si `DATABASE_URL` ou `JWT_SECRET` manquent au runtime en production, le backend echoue explicitement au demarrage
 - `DEMO_MODE` est desactive par defaut et doit rester a `false` en production
+- si `CORS_ALLOWED_ORIGINS` est vide en production, seuls les clients sans header `Origin` (mobile natif, curl, healthchecks) restent acceptes sans restriction CORS navigateur
+- le rate limit auth est actif par defaut en production; vous pouvez l'ajuster avec `AUTH_RATE_LIMIT_ENABLED`, `AUTH_RATE_LIMIT_WINDOW_MS` et `AUTH_RATE_LIMIT_MAX_REQUESTS`
 
 Remplacer dans `deploy/nginx/conf.d/backend.conf` :
 

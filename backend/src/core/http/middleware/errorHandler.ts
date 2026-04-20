@@ -1,9 +1,9 @@
 import { NextFunction, Request, Response } from 'express';
-import { AppError } from '../../../shared/errors';
 import { logger } from '../../../config/logger';
+import { buildPublicErrorMessage, resolveHttpErrorStatus } from '../httpErrors';
 
 export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
-  const status = err instanceof AppError ? err.status : 500;
+  const status = resolveHttpErrorStatus(err);
   logger.error(
     {
       err,
@@ -15,5 +15,5 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     },
     'http error'
   );
-  res.status(status).json({ message: err.message || 'Internal error' });
+  res.status(status).json({ message: buildPublicErrorMessage(err) });
 }

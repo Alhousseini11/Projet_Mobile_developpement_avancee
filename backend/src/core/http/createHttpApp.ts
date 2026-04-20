@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
+import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
@@ -11,17 +13,35 @@ import {
   submitResetPasswordPage
 } from '../../modules/auth/auth.controller';
 import { readHealthCheck } from './health';
+import { createAuthRateLimit, createCorsOptions } from './security';
 
 export function createHttpApp() {
   const app = express();
   const uploadsDir = path.resolve(process.cwd(), 'uploads');
+  const authRateLimit = createAuthRateLimit();
+
   fs.mkdirSync(uploadsDir, { recursive: true });
 
-  app.use(cors());
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: false }));
-  app.use('/uploads', express.static(uploadsDir));
+  app.disable('x-powered-by');
+  app.set('trust proxy', env.TRUST_PROXY);
+
   app.use(requestLogger);
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: false
+    })
+  );
+  app.use(cors(createCorsOptions()));
+  app.use(express.json({ limit: env.HTTP_JSON_LIMIT }));
+  app.use(express.urlencoded({ extended: false, limit: env.HTTP_JSON_LIMIT }));
+  app.use('/uploads', express.static(uploadsDir));
+
+  app.use('/api/auth/register', authRateLimit);
+  app.use('/api/auth/login', authRateLimit);
+  app.use('/api/auth/forgot-password', authRateLimit);
+  app.use('/api/auth/reset-password', authRateLimit);
 
   app.get('/', (_req, res) => {
     res.json({
@@ -47,7 +67,7 @@ export function createHttpApp() {
   });
 
   app.get('/reset-password', renderResetPasswordPage);
-  app.post('/reset-password', submitResetPasswordPage);
+  app.post('/reset-password', authRateLimit, submitResetPasswordPage);
 
   registerRoutes(app);
 
