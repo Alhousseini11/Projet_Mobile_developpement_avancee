@@ -303,6 +303,32 @@ async function createVehicle(token: string, overrides: Record<string, unknown> =
   });
 }
 
+async function createReservation(
+  token: string,
+  overrides: Record<string, unknown> = {}
+) {
+  return apiRequest<{
+    id: string;
+    serviceId: string;
+    vehicleId?: string;
+    date: string;
+    time: string;
+    status: string;
+    notes?: string;
+    message?: string;
+  }>('/api/reservations', {
+    method: 'POST',
+    token,
+    body: {
+      serviceId: 'oil-change',
+      date: '2026-04-16',
+      time: '08:30',
+      notes: 'Integration test reservation',
+      ...overrides
+    }
+  });
+}
+
 before(async () => {
   if (!canRunIntegration) {
     return;
@@ -490,6 +516,32 @@ runIntegrationTest('register, login refresh and profile flow work through HTTP',
   assert.deepEqual(invoicesResult.payload, []);
 });
 
+runIntegrationTest('profile update rejects an email already used by another user', async () => {
+  const firstSession = await registerUser();
+  const secondSession = await registerUser();
+
+  const conflictingUpdateResult = await apiRequest<{ message: string }>('/api/profile', {
+    method: 'PUT',
+    token: secondSession.accessToken,
+    body: {
+      email: firstSession.email,
+      fullName: 'Second User',
+      phone: '+1 514 555 4444'
+    }
+  });
+
+  assert.equal(conflictingUpdateResult.response.status, 409);
+  assert.equal(conflictingUpdateResult.payload?.message, 'Impossible de mettre a jour ce profil.');
+
+  const secondProfileResult = await apiRequest<{ email: string; fullName: string }>('/api/profile', {
+    token: secondSession.accessToken
+  });
+
+  assert.equal(secondProfileResult.response.status, 200);
+  assert.equal(secondProfileResult.payload?.email, secondSession.email);
+  assert.equal(secondProfileResult.payload?.fullName, 'Integration User');
+});
+
 runIntegrationTest('public endpoints, password reset and placeholder routes expose stable responses', async () => {
   const rootResult = await apiRequest<{ ok: boolean; service: string }>('/');
   assert.equal(rootResult.response.status, 200);
@@ -616,6 +668,83 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
 
   assert.equal(loginAfterResetResult.response.status, 200);
   assert.equal(loginAfterResetResult.payload?.user.email, session.email);
+});
+
+runIntegrationTest('home feed stays valid with an invalid optional auth token', async () => {
+  const homeResult = await apiRequest<{
+    displayName: string;
+    nextAppointmentLabel: string;
+    reminderMessage: string;
+  }>('/api/home', {
+    token: 'invalid-token'
+  });
+
+  assert.equal(homeResult.response.status, 200);
+  assert.equal(homeResult.payload?.displayName, 'Alex');
+  assert.match(homeResult.payload?.nextAppointmentLabel ?? '', /Aucun rendez-vous/i);
+  assert.match(homeResult.payload?.reminderMessage ?? '', /Consultez vos vehicules/i);
+});
+
+runIntegrationTest('password reset avoids account enumeration and invalidates used reset codes', async () => {
+  const session = await registerUser();
+  const missingEmail = `missing-${randomBytes(4).toString('hex')}@example.com`;
+
+  const unknownAccountForgotPasswordResult = await apiRequest<{
+    message: string;
+    resetToken?: string;
+    resetCode?: string;
+  }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: {
+      email: missingEmail
+    }
+  });
+
+  assert.equal(unknownAccountForgotPasswordResult.response.status, 200);
+  assert.match(unknownAccountForgotPasswordResult.payload?.message ?? '', /si un compte existe/i);
+  assert.equal(unknownAccountForgotPasswordResult.payload?.resetToken, undefined);
+  assert.equal(unknownAccountForgotPasswordResult.payload?.resetCode, undefined);
+
+  const forgotPasswordResult = await apiRequest<{
+    message: string;
+    resetCode?: string;
+  }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: {
+      email: session.email
+    }
+  });
+
+  assert.equal(forgotPasswordResult.response.status, 200);
+  assert.ok(forgotPasswordResult.payload?.resetCode);
+
+  const firstResetResult = await apiRequest<{
+    message: string;
+    user: { email: string };
+  }>('/api/auth/reset-password', {
+    method: 'POST',
+    body: {
+      email: session.email,
+      code: forgotPasswordResult.payload?.resetCode,
+      newPassword: 'Garage999!'
+    }
+  });
+
+  assert.equal(firstResetResult.response.status, 200);
+  assert.equal(firstResetResult.payload?.user.email, session.email);
+  assert.match(firstResetResult.payload?.message ?? '', /reinitialise/i);
+
+  const reusedCodeResetResult = await apiRequest<{ message: string }>('/api/auth/reset-password', {
+    method: 'POST',
+    body: {
+      email: session.email,
+      code: forgotPasswordResult.payload?.resetCode,
+      newPassword: 'Garage1000!'
+    }
+  });
+
+  assert.equal(reusedCodeResetResult.response.status, 401);
+  assert.match(reusedCodeResetResult.payload?.message ?? '', /code de reinitialisation invalide ou expire/i);
 });
 
 runIntegrationTest('auth endpoints reject invalid credentials and duplicate accounts', async () => {
@@ -1548,6 +1677,87 @@ runIntegrationTest('reservation, review and vehicle endpoints reject invalid req
     token: session.accessToken
   });
   assert.equal(missingVehicleDeleteResult.response.status, 404);
+});
+
+runIntegrationTest('reservation and invoice endpoints keep user resources isolated', async () => {
+  const ownerSession = await registerUser();
+  const outsiderSession = await registerUser();
+  const reservationDate = '2099-04-18';
+
+  const ownerVehicleResult = await createVehicle(ownerSession.accessToken, {
+    name: 'Mazda 3',
+    model: 'Mazda 3 2022',
+    year: 2022,
+    mileage: 18000,
+    licensePlate: 'QC-321'
+  });
+  assert.equal(ownerVehicleResult.response.status, 201);
+
+  const availableSlotsResult = await apiRequest<string[]>(
+    `/api/reservations/slots?serviceId=oil-change&date=${reservationDate}`
+  );
+  assert.equal(availableSlotsResult.response.status, 200);
+  assert.ok((availableSlotsResult.payload?.length ?? 0) >= 2);
+
+  const ownerReservationResult = await createReservation(ownerSession.accessToken, {
+    vehicleId: ownerVehicleResult.payload?.id,
+    date: reservationDate,
+    time: availableSlotsResult.payload?.[0],
+    notes: 'Reservation privee'
+  });
+  assert.equal(ownerReservationResult.response.status, 201);
+
+  const ownerInvoicesResult = await apiRequest<Array<{ id: string; serviceLabel: string }>>(
+    '/api/profile/invoices',
+    {
+      token: ownerSession.accessToken
+    }
+  );
+  assert.equal(ownerInvoicesResult.response.status, 200);
+  assert.equal(ownerInvoicesResult.payload?.length, 1);
+  assert.equal(ownerInvoicesResult.payload?.[0]?.serviceLabel, 'Vidange');
+
+  const foreignReservationReadResult = await apiRequest<{ message: string }>(
+    `/api/reservations/${ownerReservationResult.payload?.id}`,
+    {
+      token: outsiderSession.accessToken
+    }
+  );
+  assert.equal(foreignReservationReadResult.response.status, 404);
+  assert.match(foreignReservationReadResult.payload?.message ?? '', /not found/i);
+
+  const foreignReservationUpdateResult = await apiRequest<{ message: string }>(
+    `/api/reservations/${ownerReservationResult.payload?.id}`,
+    {
+      method: 'PATCH',
+      token: outsiderSession.accessToken,
+      body: {
+        notes: 'Tentative externe'
+      }
+    }
+  );
+  assert.equal(foreignReservationUpdateResult.response.status, 404);
+  assert.match(foreignReservationUpdateResult.payload?.message ?? '', /not found/i);
+
+  const foreignVehicleReservationResult = await createReservation(outsiderSession.accessToken, {
+    vehicleId: ownerVehicleResult.payload?.id,
+    date: reservationDate,
+    time: availableSlotsResult.payload?.[1]
+  });
+  assert.equal(foreignVehicleReservationResult.response.status, 404);
+  assert.equal(
+    foreignVehicleReservationResult.payload?.message,
+    'Vehicule introuvable pour cet utilisateur'
+  );
+
+  const foreignInvoicePdfResult = await apiRequest<{ message: string }>(
+    `/api/profile/invoices/${ownerInvoicesResult.payload?.[0]?.id}/pdf`,
+    {
+      token: outsiderSession.accessToken
+    }
+  );
+  assert.equal(foreignInvoicePdfResult.response.status, 404);
+  assert.equal(foreignInvoicePdfResult.payload?.message, 'Invoice not found');
 });
 
 runIntegrationTest('authenticated user can access vehicles, notifications, tutorials and payment summaries through HTTP', async () => {
