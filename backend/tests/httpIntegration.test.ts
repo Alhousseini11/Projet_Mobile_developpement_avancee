@@ -548,9 +548,30 @@ runIntegrationTest('public endpoints, password reset and placeholder routes expo
   assert.equal(rootResult.payload?.ok, true);
   assert.equal(rootResult.payload?.service, 'garage-mechanic-backend');
 
-  const healthResult = await apiRequest<{ ok: boolean; service: string }>('/health');
+  const healthResult = await apiRequest<{
+    ok: boolean;
+    status: 'ok' | 'degraded';
+    service: string;
+    environment: string;
+    timestamp: string;
+    checks: {
+      app: {
+        status: 'up';
+      };
+      db: {
+        status: 'up' | 'down';
+      };
+    };
+  }>('/health');
   assert.equal(healthResult.response.status, 200);
   assert.equal(healthResult.payload?.ok, true);
+  assert.equal(healthResult.payload?.status, 'ok');
+  assert.equal(healthResult.payload?.service, 'garage-mechanic-backend');
+  assert.match(healthResult.payload?.environment ?? '', /^(development|test|production)$/);
+  assert.equal(Number.isNaN(Date.parse(healthResult.payload?.timestamp ?? '')), false);
+  assert.equal(healthResult.payload?.checks.app.status, 'up');
+  assert.equal(healthResult.payload?.checks.db.status, 'up');
+  assert.ok(healthResult.response.headers.get('x-request-id'));
 
   const homeResult = await apiRequest<{
     displayName: string;

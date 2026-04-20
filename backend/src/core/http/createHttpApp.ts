@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import cors from 'cors';
 import express from 'express';
+import { logger } from '../../config/logger';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
 import { registerRoutes } from '../../modules';
@@ -9,6 +10,7 @@ import {
   renderResetPasswordPage,
   submitResetPasswordPage
 } from '../../modules/auth/auth.controller';
+import { readHealthCheck } from './health';
 
 export function createHttpApp() {
   const app = express();
@@ -28,11 +30,20 @@ export function createHttpApp() {
     });
   });
 
-  app.get('/health', (_req, res) => {
-    res.json({
-      ok: true,
-      service: 'garage-mechanic-backend'
-    });
+  app.get('/health', async (_req, res) => {
+    const healthCheck = await readHealthCheck();
+
+    if (healthCheck.error) {
+      logger.warn(
+        {
+          err: healthCheck.error,
+          requestId: typeof res.locals.requestId === 'string' ? res.locals.requestId : undefined
+        },
+        'Healthcheck database probe failed'
+      );
+    }
+
+    res.status(healthCheck.statusCode).json(healthCheck.payload);
   });
 
   app.get('/reset-password', renderResetPasswordPage);

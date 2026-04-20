@@ -10,6 +10,7 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
       method: req.method,
       url: req.originalUrl || req.url,
       statusCode: status,
+      requestId: typeof res.locals.requestId === 'string' ? res.locals.requestId : undefined,
       userId: typeof res.locals.authUser?.id === 'string' ? res.locals.authUser.id : undefined
     },
     'http error'
