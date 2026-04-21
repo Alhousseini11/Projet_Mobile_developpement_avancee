@@ -1,4 +1,5 @@
 const webpack = require("@nativescript/webpack");
+const { DefinePlugin } = require("webpack");
 
 function toArray(value) {
 	if (!value) {
@@ -10,6 +11,12 @@ function toArray(value) {
 
 function normalizeIgnoredEntries(entries) {
 	return entries.filter((entry) => typeof entry === "string" && entry.length > 0);
+}
+
+function readBuildTimeEnv(name) {
+	const value = process.env[name];
+
+	return typeof value === "string" ? value.trim() : "";
 }
 
 module.exports = (env) => {
@@ -32,6 +39,13 @@ module.exports = (env) => {
 			"**/System Volume Information/**",
 		],
 	};
+
+	config.plugins = [
+		...(config.plugins || []),
+		new DefinePlugin({
+			__NS_API_BASE_URL__: JSON.stringify(readBuildTimeEnv("NS_API_BASE_URL")),
+		}),
+	];
 
 	return config;
 };

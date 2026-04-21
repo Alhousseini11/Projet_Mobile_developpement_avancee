@@ -4,11 +4,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "android": "ns run android",
+    "android": "node scripts/require-explicit-env.js android",
     "android:local": "node scripts/run-with-env.js .env.local ns run android",
     "android:shared-vps": "node scripts/run-with-env.js .env.shared-vps ns run android",
     "build:android:prod": "node scripts/run-with-env.js .env.prod ns build android --env.production",
-    "ios": "ns run ios",
+    "ios": "node scripts/require-explicit-env.js ios",
     "ios:local": "node scripts/run-with-env.js .env.local ns run ios",
     "ios:shared-vps": "node scripts/run-with-env.js .env.shared-vps ns run ios",
     "build:ios:prod": "node scripts/run-with-env.js .env.prod ns build ios --env.production",
