@@ -1,0 +1,33 @@
+server {
+  listen 80;
+  server_name garageplus.org www.garageplus.org;
+
+  location / {
+    return 301 https://$host$request_uri;
+  }
+}
+
+server {
+  listen 443 ssl http2;
+  server_name garageplus.org www.garageplus.org;
+
+  ssl_certificate /etc/nginx/certs/garageplus.org.fullchain.pem;
+  ssl_certificate_key /etc/nginx/certs/garageplus.org.privkey.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers off;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  location = / {
+    return 302 /privacy/;
+  }
+
+  location = /privacy {
+    return 301 /privacy/;
+  }
+
+  location /privacy/ {
+    try_files $uri $uri/ /privacy/index.html;
+  }
+}
