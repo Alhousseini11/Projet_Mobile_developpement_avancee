@@ -108,6 +108,23 @@
 
               <Label col="2" text=">" class="item-chevron" />
             </GridLayout>
+
+            <GridLayout columns="58,*,auto" class="list-item compact danger-item" @tap="handleDeleteAccount">
+              <GridLayout col="0" class="item-badge danger">
+                <Label text="DEL" class="item-badge-text danger" />
+              </GridLayout>
+
+              <StackLayout col="1" class="item-copy">
+                <Label text="Supprimer mon compte" class="item-title danger-title" />
+                <Label
+                  text="Effacer definitivement le compte et les donnees associees."
+                  class="item-description"
+                  textWrap="true"
+                />
+              </StackLayout>
+
+              <Label col="2" text=">" class="item-chevron" />
+            </GridLayout>
           </StackLayout>
         </StackLayout>
       </ScrollView>
@@ -149,7 +166,7 @@
 </template>
 
 <script lang="ts" setup>
-import { alert, confirm } from '@nativescript/core'
+import { alert, confirm, inputType, prompt } from '@nativescript/core'
 import { computed, ref } from 'nativescript-vue'
 import AuthService from '@/services/AuthService'
 import ProfileService from '@/services/ProfileService'
@@ -266,6 +283,63 @@ async function handleLogout() {
   void navigateToPage('login', { clearHistory: true })
 }
 
+async function handleDeleteAccount() {
+  const approved = await confirm({
+    title: 'Supprimer mon compte',
+    message:
+      'Cette action est irreversible. Votre profil, vos vehicules, vos reservations et vos donnees associees seront supprimes.',
+    okButtonText: 'Continuer',
+    cancelButtonText: 'Annuler'
+  })
+
+  if (!approved) {
+    return
+  }
+
+  const passwordPrompt = await prompt({
+    title: 'Confirmation du mot de passe',
+    message: 'Saisissez votre mot de passe pour confirmer la suppression du compte.',
+    okButtonText: 'Supprimer',
+    cancelButtonText: 'Annuler',
+    defaultText: '',
+    inputType: inputType.password
+  })
+
+  if (!passwordPrompt.result) {
+    return
+  }
+
+  const password = passwordPrompt.text.trim()
+  if (!password) {
+    await alert({
+      title: 'Mot de passe requis',
+      message: 'Veuillez saisir votre mot de passe pour supprimer le compte.',
+      okButtonText: 'OK'
+    })
+    return
+  }
+
+  try {
+    await ProfileService.deleteAccount(password)
+    AuthService.logout()
+    await alert({
+      title: 'Compte supprime',
+      message: 'Votre compte a ete supprime avec succes.',
+      okButtonText: 'OK'
+    })
+    void navigateToPage('login', { clearHistory: true })
+  } catch (error) {
+    await alert({
+      title: 'Suppression impossible',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Impossible de supprimer ce compte pour le moment.',
+      okButtonText: 'OK'
+    })
+  }
+}
+
 function navigateTo(page: AppPage) {
   void navigateToPage(page, { currentPage: 'profile' })
 }
@@ -324,13 +398,17 @@ function goBack() {
 .item-badge { width: 38; height: 38; border-radius: 10; background-color: #f3f4f6; vertical-align: center; }
 .item-badge.featured { background-color: #dc2626; }
 .item-badge.alert { background-color: #fee2e2; }
+.item-badge.danger { background-color: #7f1d1d; }
 .item-badge.muted { background-color: #eef2f7; }
 .item-badge-text { color: #1f2733; font-size: 11; font-weight: 800; text-align: center; vertical-align: center; }
 .item-badge-text.alert { color: #b91c1c; }
+.item-badge-text.danger { color: #ffffff; }
 .item-badge-text.muted { color: #475569; }
 .list-item.featured .item-badge-text { color: #ffffff; }
+.danger-item { background-color: #fff7f7; }
 .item-copy { margin-left: 14; margin-right: 12; }
 .item-title { color: #111827; font-size: 15; font-weight: 700; }
+.danger-title { color: #991b1b; }
 .item-description { color: #6b7280; font-size: 12; margin-top: 4; }
 .item-chevron { color: #9ca3af; font-size: 15; font-weight: 700; }
 .bottom-nav { background-color: #121826; border-top-width: 1; border-top-color: #1f2733; }

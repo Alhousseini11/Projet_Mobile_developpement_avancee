@@ -103,6 +103,14 @@ function getFallbackPaymentStore() {
   return initialPayment
 }
 
+function clearFallbackStateForCurrentSession() {
+  const key = getCurrentSessionFallbackKey()
+  fallbackProfilesByKey.delete(key)
+  fallbackPaymentsByKey.delete(key)
+  profileRequestsByKey.delete(key)
+  paymentMethodRequestsByKey.delete(key)
+}
+
 async function syncAppointmentCount(profile: UserProfile): Promise<UserProfile> {
   if (profile.appointmentCount > 0) {
     return cloneProfile(profile)
@@ -179,6 +187,22 @@ class ProfileService {
       return cloneProfile(profile)
     } catch (error) {
       console.error('Error updating profile:', error)
+      throw error
+    }
+  }
+
+  async deleteAccount(password: string): Promise<void> {
+    try {
+      await apiRequest<void>('/profile', {
+        method: 'DELETE',
+        body: {
+          password
+        },
+        timeoutMs: PROFILE_TIMEOUT_MS
+      })
+      clearFallbackStateForCurrentSession()
+    } catch (error) {
+      console.error('Error deleting account:', error)
       throw error
     }
   }
