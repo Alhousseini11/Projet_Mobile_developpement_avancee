@@ -36,6 +36,31 @@ function readStringEnv(value: string | undefined, fallback = '') {
   return value.trim();
 }
 
+function readIntegerEnv(value: string | undefined, fallback: number, minimum = 0) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return fallback;
+  }
+
+  const parsedValue = Number.parseInt(value.trim(), 10);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < minimum) {
+    return fallback;
+  }
+
+  return parsedValue;
+}
+
+function readListEnv(value: string | undefined) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return [];
+  }
+
+  return value
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
 function normalizeNodeEnv(value: string | undefined): RuntimeMode {
   switch (readStringEnv(value, 'development').toLowerCase()) {
     case 'production':
@@ -84,8 +109,18 @@ export function requireEnvInProduction(name: string) {
 export const env = {
   NODE_ENV: nodeEnv,
   PORT: Number(process.env.PORT || 3000),
+  TRUST_PROXY: readIntegerEnv(process.env.TRUST_PROXY, 0, 0),
   DATABASE_URL: readStringEnv(process.env.DATABASE_URL),
   JWT_SECRET: readStringEnv(process.env.JWT_SECRET),
+  CORS_ALLOWED_ORIGINS: readListEnv(process.env.CORS_ALLOWED_ORIGINS),
+  HTTP_JSON_LIMIT: readStringEnv(process.env.HTTP_JSON_LIMIT, '1mb'),
+  AUTH_RATE_LIMIT_ENABLED: readBooleanEnv(process.env.AUTH_RATE_LIMIT_ENABLED, nodeEnv === 'production'),
+  AUTH_RATE_LIMIT_WINDOW_MS: readIntegerEnv(process.env.AUTH_RATE_LIMIT_WINDOW_MS, 60_000, 1_000),
+  AUTH_RATE_LIMIT_MAX_REQUESTS: readIntegerEnv(
+    process.env.AUTH_RATE_LIMIT_MAX_REQUESTS,
+    nodeEnv === 'production' ? 10 : 30,
+    1
+  ),
   SENDGRID_ENABLED: readBooleanEnv(process.env.SENDGRID_ENABLED, false),
   SENDGRID_API_KEY: readStringEnv(process.env.SENDGRID_API_KEY),
   SENDGRID_FROM_EMAIL: readStringEnv(process.env.SENDGRID_FROM_EMAIL),
@@ -116,6 +151,24 @@ export function validateRuntimeEnv() {
 
   if (isProductionEnvironment() && env.DEMO_MODE) {
     validationErrors.push('DEMO_MODE must stay disabled in production.');
+  }
+
+  for (const origin of env.CORS_ALLOWED_ORIGINS) {
+    try {
+      const normalizedOrigin = new URL(origin);
+      const isHttpOrigin =
+        normalizedOrigin.protocol === 'http:' || normalizedOrigin.protocol === 'https:';
+
+      if (!isHttpOrigin || normalizedOrigin.origin !== origin) {
+        validationErrors.push(
+          `CORS_ALLOWED_ORIGINS contains an invalid origin "${origin}". Use comma-separated absolute origins such as https://app.example.com`
+        );
+      }
+    } catch {
+      validationErrors.push(
+        `CORS_ALLOWED_ORIGINS contains an invalid origin "${origin}". Use comma-separated absolute origins such as https://app.example.com`
+      );
+    }
   }
 
   if (validationErrors.length > 0) {

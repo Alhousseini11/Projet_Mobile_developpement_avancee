@@ -43,6 +43,17 @@ app/
 - `app/components/*` should stay focused on rendering and user interactions.
 - `NS_API_BASE_URL` must be configured explicitly per environment. No hardcoded VPS fallback is allowed in frontend code.
 
+### Frontend environment commands
+
+- `npm run android` and `npm run ios` are intentionally blocked until an explicit environment is chosen.
+- Copy `.env.local.example` to `.env.local` for local backend development.
+- Copy `.env.shared-vps.example` to `.env.shared-vps` for the team VPS backend.
+- Create `.env.prod` for production mobile builds.
+- Use `npm run android:local` or `npm run ios:local` for local backend development.
+- Use `npm run android:shared-vps` or `npm run ios:shared-vps` for the shared VPS backend.
+- Use `npm run build:android:prod` or `npm run build:ios:prod` for production builds.
+- For Android emulator local development, `NS_API_BASE_URL=http://10.0.2.2:3000/api` is the usual host value.
+
 ## Backend structure
 
 ```text

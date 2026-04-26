@@ -1,6 +1,6 @@
 import { clearStoredSession, getStoredAccessToken } from '@/utils/authStorage'
 
-declare const __NS_API_BASE_URL__: string | undefined
+declare const __NS_API_BASE_URL__: string
 
 function createMissingApiBaseUrlError() {
   return new Error(
@@ -14,9 +14,18 @@ function createMissingApiBaseUrlError() {
   )
 }
 
-function readApiBaseUrlEnv() {
+function readBuildTimeApiBaseUrl() {
   if (typeof __NS_API_BASE_URL__ === 'string' && __NS_API_BASE_URL__.trim().length > 0) {
     return __NS_API_BASE_URL__.trim()
+  }
+
+  return ''
+}
+
+function readApiBaseUrlEnv() {
+  const buildTimeValue = readBuildTimeApiBaseUrl()
+  if (buildTimeValue) {
+    return buildTimeValue
   }
 
   if (

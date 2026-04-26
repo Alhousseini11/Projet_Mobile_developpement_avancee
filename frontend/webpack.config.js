@@ -13,7 +13,9 @@ function normalizeIgnoredEntries(entries) {
 	return entries.filter((entry) => typeof entry === "string" && entry.length > 0);
 }
 
-function readEnvString(value) {
+function readBuildTimeEnv(name) {
+	const value = process.env[name];
+
 	return typeof value === "string" ? value.trim() : "";
 }
 
@@ -38,11 +40,10 @@ module.exports = (env) => {
 		],
 	};
 
-	const configuredApiBaseUrl = readEnvString(process.env.NS_API_BASE_URL);
 	config.plugins = [
 		...(config.plugins || []),
 		new DefinePlugin({
-			__NS_API_BASE_URL__: JSON.stringify(configuredApiBaseUrl),
+			__NS_API_BASE_URL__: JSON.stringify(readBuildTimeEnv("NS_API_BASE_URL")),
 		}),
 	];
 

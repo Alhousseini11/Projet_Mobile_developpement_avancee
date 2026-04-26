@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { AppError } from '../../shared/errors';
 import { logger } from '../../config/logger';
+import { buildPublicErrorMessage, resolveHttpErrorStatus } from '../../core/http/httpErrors';
 import {
   loginUser,
   refreshAuthSession,
@@ -84,14 +84,15 @@ function renderResetPasswordPageDocument(payload: {
 }
 
 function toErrorResponse(req: Request, res: Response, error: unknown) {
-  const status = error instanceof AppError ? error.status : 500;
-  const message = error instanceof Error ? error.message : 'Internal error';
+  const status = resolveHttpErrorStatus(error);
+  const message = buildPublicErrorMessage(error);
   logger.error(
     {
       status,
-      message,
+      message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
       path: req.path,
+      requestId: typeof res.locals.requestId === 'string' ? res.locals.requestId : undefined,
       bodyType: typeof req.body,
       bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : [],
       email: typeof req.body?.email === 'string' ? req.body.email : undefined,
@@ -223,14 +224,15 @@ export async function submitResetPasswordPage(req: Request, res: Response) {
         })
       );
   } catch (error) {
-    const status = error instanceof AppError ? error.status : 500;
-    const message = error instanceof Error ? error.message : 'Internal error';
+    const status = resolveHttpErrorStatus(error);
+    const message = buildPublicErrorMessage(error);
     logger.error(
       {
         status,
-        message,
+        message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
         path: req.path,
+        requestId: typeof res.locals.requestId === 'string' ? res.locals.requestId : undefined,
         email,
         hasNewPassword: typeof req.body?.newPassword === 'string'
       },
