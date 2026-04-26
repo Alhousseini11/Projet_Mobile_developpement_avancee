@@ -10,6 +10,7 @@ router.use(authGuard);
 
 router.get('/', profileController.getProfile);
 router.put('/', profileController.updateProfile);
+router.delete('/', profileController.deleteAccount);
 router.get('/invoices', billingController.listInvoices);
 router.get('/invoices/:invoiceId/pdf', billingController.downloadInvoicePdf);
 router.get('/payment-method', paymentController.getPaymentMethod);

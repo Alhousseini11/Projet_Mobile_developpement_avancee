@@ -546,6 +546,265 @@ runIntegrationTest('profile update rejects an email already used by another user
   assert.equal(secondProfileResult.payload?.fullName, 'Integration User');
 });
 
+runIntegrationTest('authenticated users can permanently delete their account', async () => {
+  const session = await registerUser();
+  const peerSession = await registerUser();
+
+  const vehicleResult = await createVehicle(session.accessToken, {
+    name: 'Honda Civic',
+    model: 'Civic 2021',
+    year: 2021,
+    mileage: 32500,
+    licensePlate: 'DEL-001'
+  });
+  assert.equal(vehicleResult.response.status, 201);
+
+  const reservationResult = await createReservation(session.accessToken, {
+    serviceId: 'oil-change',
+    vehicleId: vehicleResult.payload?.id,
+    date: '2099-04-20',
+    time: '10:00',
+    notes: 'Reservation before account deletion'
+  });
+  assert.equal(reservationResult.response.status, 201);
+
+  const tutorial = await prismaClient.tutorial.create({
+    data: {
+      title: 'Suppression compte test',
+      description: 'Tutoriel utilise pour la suppression de compte',
+      category: 'entretien',
+      difficulty: 'facile',
+      duration: 12,
+      thumbnail: 'https://example.com/tutorial-delete.png',
+      videoUrl: 'https://example.com/tutorial-delete.mp4',
+      instructions: ['Etape 1'],
+      tools: ['Cle']
+    }
+  });
+
+  await prismaClient.userProfileSettings.create({
+    data: {
+      userId: session.userId,
+      addressLine: '123 Rue Test',
+      city: 'Montreal, QC'
+    }
+  });
+
+  await prismaClient.paymentMethod.create({
+    data: {
+      userId: session.userId,
+      stripeRef: 'cus_delete_test'
+    }
+  });
+
+  await prismaClient.notification.create({
+    data: {
+      userId: session.userId,
+      type: 'SYSTEM',
+      title: 'Notification test',
+      body: 'Corps de notification test'
+    }
+  });
+
+  await prismaClient.quote.create({
+    data: {
+      userId: session.userId,
+      serviceType: 'oil-change',
+      estimated: 99.99,
+      currency: 'CAD'
+    }
+  });
+
+  await prismaClient.passwordResetCode.create({
+    data: {
+      userId: session.userId,
+      codeHash: 'delete-test-hash',
+      expiresAt: new Date(Date.now() + 60_000)
+    }
+  });
+
+  await prismaClient.favorite.create({
+    data: {
+      userId: session.userId,
+      tutorialId: tutorial.id
+    }
+  });
+
+  await prismaClient.tutorialView.create({
+    data: {
+      userId: session.userId,
+      tutorialId: tutorial.id
+    }
+  });
+
+  await prismaClient.tutorialRating.create({
+    data: {
+      userId: session.userId,
+      tutorialId: tutorial.id,
+      rating: 4
+    }
+  });
+
+  await prismaClient.chatMessage.create({
+    data: {
+      senderId: session.userId,
+      receiverId: peerSession.userId,
+      body: 'Message envoye avant suppression'
+    }
+  });
+
+  await prismaClient.chatMessage.create({
+    data: {
+      senderId: peerSession.userId,
+      receiverId: session.userId,
+      body: 'Reponse avant suppression'
+    }
+  });
+
+  await prismaClient.reminder.create({
+    data: {
+      vehicleId: vehicleResult.payload!.id,
+      title: 'Controle suppression',
+      dueAt: new Date('2099-04-18T09:00:00.000Z')
+    }
+  });
+
+  await prismaClient.maintenanceRecord.create({
+    data: {
+      vehicleId: vehicleResult.payload!.id,
+      type: 'inspection',
+      description: 'Entretien avant suppression',
+      mileage: 32000,
+      cost: 54.99,
+      date: new Date('2099-04-10T09:00:00.000Z')
+    }
+  });
+
+  await prismaClient.vehicleDocument.create({
+    data: {
+      vehicleId: vehicleResult.payload!.id,
+      type: 'registration',
+      title: 'Carte grise suppression',
+      fileUrl: 'https://example.com/registration-delete.pdf'
+    }
+  });
+
+  await prismaClient.vehicleInsurance.create({
+    data: {
+      vehicleId: vehicleResult.payload!.id,
+      provider: 'Assureur Test',
+      policyNumber: 'DEL-INS-001',
+      startDate: new Date('2099-01-01T00:00:00.000Z'),
+      endDate: new Date('2100-01-01T00:00:00.000Z'),
+      coverage: 'Complete'
+    }
+  });
+
+  await prismaClient.review.create({
+    data: {
+      userId: session.userId,
+      reservationId: reservationResult.payload!.id,
+      rating: 5,
+      comment: 'Avis avant suppression'
+    }
+  });
+
+  const deleteResult = await apiRequest<null>('/api/profile', {
+    method: 'DELETE',
+    token: session.accessToken,
+    body: {
+      password: session.password
+    }
+  });
+
+  assert.equal(deleteResult.response.status, 204);
+
+  const [
+    deletedUser,
+    vehiclesCount,
+    reservationsCount,
+    reviewsCount,
+    remindersCount,
+    maintenanceCount,
+    documentsCount,
+    insuranceCount,
+    notificationsCount,
+    paymentMethodsCount,
+    settingsCount,
+    quotesCount,
+    passwordResetCodesCount,
+    favoritesCount,
+    tutorialViewsCount,
+    tutorialRatingsCount,
+    chatMessagesCount
+  ] = await Promise.all([
+    prismaClient.user.findUnique({ where: { id: session.userId } }),
+    prismaClient.vehicle.count({ where: { userId: session.userId } }),
+    prismaClient.reservation.count({ where: { userId: session.userId } }),
+    prismaClient.review.count({ where: { userId: session.userId } }),
+    prismaClient.reminder.count({ where: { vehicleId: vehicleResult.payload!.id } }),
+    prismaClient.maintenanceRecord.count({ where: { vehicleId: vehicleResult.payload!.id } }),
+    prismaClient.vehicleDocument.count({ where: { vehicleId: vehicleResult.payload!.id } }),
+    prismaClient.vehicleInsurance.count({ where: { vehicleId: vehicleResult.payload!.id } }),
+    prismaClient.notification.count({ where: { userId: session.userId } }),
+    prismaClient.paymentMethod.count({ where: { userId: session.userId } }),
+    prismaClient.userProfileSettings.count({ where: { userId: session.userId } }),
+    prismaClient.quote.count({ where: { userId: session.userId } }),
+    prismaClient.passwordResetCode.count({ where: { userId: session.userId } }),
+    prismaClient.favorite.count({ where: { userId: session.userId } }),
+    prismaClient.tutorialView.count({ where: { userId: session.userId } }),
+    prismaClient.tutorialRating.count({ where: { userId: session.userId } }),
+    prismaClient.chatMessage.count({
+      where: {
+        OR: [{ senderId: session.userId }, { receiverId: session.userId }]
+      }
+    })
+  ]);
+
+  assert.equal(deletedUser, null);
+  assert.equal(vehiclesCount, 0);
+  assert.equal(reservationsCount, 0);
+  assert.equal(reviewsCount, 0);
+  assert.equal(remindersCount, 0);
+  assert.equal(maintenanceCount, 0);
+  assert.equal(documentsCount, 0);
+  assert.equal(insuranceCount, 0);
+  assert.equal(notificationsCount, 0);
+  assert.equal(paymentMethodsCount, 0);
+  assert.equal(settingsCount, 0);
+  assert.equal(quotesCount, 0);
+  assert.equal(passwordResetCodesCount, 0);
+  assert.equal(favoritesCount, 0);
+  assert.equal(tutorialViewsCount, 0);
+  assert.equal(tutorialRatingsCount, 0);
+  assert.equal(chatMessagesCount, 0);
+
+  const deletedSessionProfileResult = await apiRequest<{ message: string }>('/api/profile', {
+    token: session.accessToken
+  });
+  assert.equal(deletedSessionProfileResult.response.status, 401);
+});
+
+runIntegrationTest('account deletion rejects an invalid password', async () => {
+  const session = await registerUser();
+
+  const deleteResult = await apiRequest<{ message: string }>('/api/profile', {
+    method: 'DELETE',
+    token: session.accessToken,
+    body: {
+      password: 'MotDePasseFaux!'
+    }
+  });
+
+  assert.equal(deleteResult.response.status, 401);
+  assert.equal(deleteResult.payload?.message, 'Mot de passe invalide.');
+
+  const existingUser = await prismaClient.user.findUnique({
+    where: { id: session.userId }
+  });
+  assert.ok(existingUser);
+});
+
 runIntegrationTest('public endpoints, password reset and placeholder routes expose stable responses', async () => {
   const rootResult = await apiRequest<{ ok: boolean; service: string }>('/');
   assert.equal(rootResult.response.status, 200);

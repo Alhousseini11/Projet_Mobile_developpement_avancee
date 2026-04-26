@@ -503,3 +503,21 @@ export async function resolveOptionalRequestUser(req: Request) {
     return null;
   }
 }
+
+export async function assertCurrentUserPassword(userId: string, passwordInput: string) {
+  const password = passwordInput.trim();
+  if (!password) {
+    throw new AppError('Le mot de passe est obligatoire.', 400);
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId }
+  });
+
+  if (!user || !verifyPassword(password, user.passwordHash)) {
+    throw new AppError('Mot de passe invalide.', 401);
+  }
+
+  assertUserIsActive(user);
+  return toAuthenticatedUser(user);
+}
