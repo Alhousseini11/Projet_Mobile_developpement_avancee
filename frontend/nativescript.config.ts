@@ -1,7 +1,7 @@
 import { NativeScriptConfig } from '@nativescript/core';
 
 export default {
-  id: 'org.nativescript.monAppGarage',
+  id: 'com.Alhousseini.Garageplus',
   appPath: 'app',
   appResourcesPath: 'App_Resources',
   android: {
