@@ -48,6 +48,10 @@ Projet_Mobile_developpement_avancee/
 |   |   `-- utils/            # Client HTTP, auth, navigation
 |   `-- scripts/              # Lancement par environnement
 |
+|-- admin-web/                # Interface web d'administration (Vite + TypeScript)
+|   |-- src/                  # Pages, client API, session admin
+|   `-- Dockerfile            # Build de production servi via Nginx
+|
 |-- backend/                  # API REST Node.js + Express + TypeScript
 |   |-- src/
 |   |   |-- core/             # App HTTP, middlewares, healthcheck
@@ -219,6 +223,7 @@ DATABASE_URL=postgresql://mon_user:change-me@postgres:5432/mon_app?schema=public
 Fichiers et variables à connaître :
 
 - `./.env` : variables Docker Compose locales (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DATABASE_URL` vers `postgres:5432`).
+- `./.env.prod` : variables Docker Compose de production, y compris `ADMIN_WEB_API_URL` pour builder `admin-web`.
 - `backend/.env` : variables backend pour `npm run dev` et `npm test` (`DATABASE_URL` vers `localhost:5433`, `JWT_SECRET`, puis les intégrations optionnelles).
 - `DEMO_MODE` est désactivé par défaut. Active-le explicitement en local seulement si tu veux exposer le compte de démo.
 - `CORS_ALLOWED_ORIGINS` : liste séparée par des virgules des origines navigateur autorisées. En production, renseigne-la explicitement pour l’admin web ou tout autre client navigateur.
@@ -260,6 +265,7 @@ Stack production :
 
 - PostgreSQL en conteneur ;
 - backend Node.js en conteneur ;
+- admin web buildé en statique et exposé sur un sous-domaine dédié ;
 - Nginx comme reverse proxy ;
 - certificats TLS montés dans `deploy/certs/` ;
 - healthcheck backend avant exposition par Nginx.

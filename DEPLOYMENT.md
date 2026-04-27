@@ -23,6 +23,7 @@ Copier les fichiers d'exemple :
 cp .env.prod.example .env.prod
 cp backend/.env.prod.example backend/.env.prod
 cp deploy/nginx/conf.d/backend.conf.example deploy/nginx/conf.d/backend.conf
+cp deploy/nginx/conf.d/admin-web.conf.example deploy/nginx/conf.d/admin-web.conf
 mkdir -p deploy/certs
 ```
 
@@ -32,13 +33,14 @@ Remplacer dans `.env.prod` :
 - `POSTGRES_USER`
 - `POSTGRES_PASSWORD`
 - `DATABASE_URL` avec l'URL PostgreSQL du conteneur `postgres`
+- `ADMIN_WEB_API_URL` avec l'URL HTTPS publique de l'API, par exemple `https://api.garageplus.org`
 
 Remplacer dans `backend/.env.prod` :
 
 - `JWT_SECRET`
 - les cles Stripe, AWS et Google si necessaire
 - `PASSWORD_RESET_URL` et `PUBLIC_BASE_URL` si exposes publiquement
-- `CORS_ALLOWED_ORIGINS` avec les origines navigateur autorisees, par exemple `https://admin.example.com`
+- `CORS_ALLOWED_ORIGINS` avec les origines navigateur autorisees, par exemple `https://admin.garageplus.org`
 - `TRUST_PROXY=1` si le backend est derriere Nginx
 
 Le Dockerfile backend ne fournit plus aucune valeur sensible par defaut :
@@ -54,12 +56,18 @@ Remplacer dans `deploy/nginx/conf.d/backend.conf` :
 
 - `api.example.com` par votre vrai domaine
 
+Remplacer dans `deploy/nginx/conf.d/admin-web.conf` :
+
+- `admin.garageplus.org` par votre vrai sous-domaine admin si vous choisissez un autre nom
+
 ## 4. Certificats SSL
 
 La configuration Nginx attend les fichiers suivants :
 
 - `deploy/certs/fullchain.pem`
 - `deploy/certs/privkey.pem`
+- `deploy/certs/admin.garageplus.org.fullchain.pem`
+- `deploy/certs/admin.garageplus.org.privkey.pem`
 
 Vous pouvez les generer avec Let's Encrypt sur le serveur, puis les copier dans `deploy/certs/`.
 
@@ -74,6 +82,15 @@ sudo cp /etc/letsencrypt/live/api.example.com/privkey.pem deploy/certs/
 sudo chown $USER:$USER deploy/certs/fullchain.pem deploy/certs/privkey.pem
 ```
 
+Exemple pour l'admin web sur `admin.garageplus.org` :
+
+```bash
+sudo certbot certonly --standalone -d admin.garageplus.org
+sudo cp /etc/letsencrypt/live/admin.garageplus.org/fullchain.pem deploy/certs/admin.garageplus.org.fullchain.pem
+sudo cp /etc/letsencrypt/live/admin.garageplus.org/privkey.pem deploy/certs/admin.garageplus.org.privkey.pem
+sudo chown $USER:$USER deploy/certs/admin.garageplus.org.fullchain.pem deploy/certs/admin.garageplus.org.privkey.pem
+```
+
 ## 5. Lancer la stack
 
 ```bash
@@ -85,6 +102,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```bash
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f backend
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f admin-web
 docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f nginx
 docker compose --env-file .env.prod -f docker-compose.prod.yml exec backend npm run prisma:status
 ```
@@ -121,5 +139,7 @@ docker exec garage-postgres-prod pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > ba
 ## Notes
 
 - En production, PostgreSQL n'est pas expose publiquement.
+- L'admin web est servi sur un sous-domaine dedie, par exemple `https://admin.garageplus.org`.
+- Le backend doit autoriser ce sous-domaine via `CORS_ALLOWED_ORIGINS`.
 - Le backend n'est pas expose directement non plus : seul Nginx ouvre `80` et `443`.
 - Pensez a utiliser de vrais secrets de production.
