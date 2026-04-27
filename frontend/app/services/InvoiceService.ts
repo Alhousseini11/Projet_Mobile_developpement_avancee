@@ -1,5 +1,8 @@
 import { DEMO_ACCOUNT, createDemoInvoices, getCurrentSessionFallbackKey } from '@/config/demo'
+import { knownFolders, path } from '@nativescript/core/file-system'
+import { getFile } from '@nativescript/core/http'
 import { API_BASE_URL, apiRequest } from '@/utils/api'
+import { getStoredAccessToken } from '@/utils/authStorage'
 import type { InvoiceSummary } from '@/types/invoice'
 
 const INVOICE_READ_TIMEOUT_MS = 8000
@@ -60,6 +63,35 @@ class InvoiceService {
 
   getInvoicePdfUrl(invoiceId: string) {
     return `${API_BASE_URL}/profile/invoices/${encodeURIComponent(invoiceId)}/pdf`
+  }
+
+  async downloadInvoicePdf(invoice: Pick<InvoiceSummary, 'id' | 'number'>) {
+    const accessToken = getStoredAccessToken()
+
+    if (!accessToken) {
+      throw new Error('Vous devez etre connecte pour telecharger une facture.')
+    }
+
+    const invoicesFolder = knownFolders.documents().getFolder('factures')
+    const fileName = `${invoice.number.replace(/[^A-Za-z0-9._-]/g, '-')}.pdf`
+    const destinationPath = path.join(invoicesFolder.path, fileName)
+
+    const downloadedFile = await getFile(
+      {
+        url: this.getInvoicePdfUrl(invoice.id),
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/pdf'
+        }
+      },
+      destinationPath
+    )
+
+    return {
+      fileName,
+      path: downloadedFile.path
+    }
   }
 }
 

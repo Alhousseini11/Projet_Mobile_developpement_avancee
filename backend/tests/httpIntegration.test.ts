@@ -2638,6 +2638,7 @@ runIntegrationTest('authenticated user can access vehicles, notifications, tutor
   );
   assert.equal(pdfResult.response.status, 200);
   assert.match(pdfResult.response.headers.get('content-type') ?? '', /application\/pdf/i);
+  assert.match(pdfResult.response.headers.get('content-disposition') ?? '', /attachment; filename=/i);
   assert.ok(pdfResult.body.length > 0);
 
   const missingPdfResult = await apiRequest<{ message: string }>('/api/profile/invoices/missing/pdf', {
