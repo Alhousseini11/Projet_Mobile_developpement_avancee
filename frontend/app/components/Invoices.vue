@@ -88,8 +88,15 @@
                 </StackLayout>
               </GridLayout>
 
-              <GridLayout class="invoice-cta" @tap="openInvoicePdf(invoice.id)">
-                <Label text="Ouvrir le PDF" class="invoice-cta-text" />
+              <GridLayout
+                class="invoice-cta"
+                :class="{ disabled: downloadingInvoiceId === invoice.id }"
+                @tap="downloadInvoicePdf(invoice)"
+              >
+                <Label
+                  :text="downloadingInvoiceId === invoice.id ? 'Telechargement...' : 'Telecharger le PDF'"
+                  class="invoice-cta-text"
+                />
               </GridLayout>
             </StackLayout>
           </StackLayout>
@@ -118,8 +125,8 @@
 </template>
 
 <script lang="ts" setup>
-import { alert } from '@nativescript/core'
-import { openUrlAsync } from '@nativescript/core/utils'
+import { alert, confirm } from '@nativescript/core'
+import { openFile } from '@nativescript/core/utils'
 import { computed, ref } from 'nativescript-vue'
 import InvoiceService from '@/services/InvoiceService'
 import type { InvoiceStatus, InvoiceSummary } from '@/types/invoice'
@@ -127,6 +134,7 @@ import { formatDate } from '@/utils/ui'
 import { goBack as navigateBack, navigateToPage, type AppPage } from '@/utils/navigation'
 
 const invoices = ref<InvoiceSummary[]>(InvoiceService.getFallbackInvoices())
+const downloadingInvoiceId = ref<string | null>(null)
 
 const totalAmountLabel = computed(() => {
   const total = invoices.value.reduce((sum, invoice) => sum + invoice.totalAmount, 0)
@@ -150,15 +158,47 @@ function formatAmount(amount: number, currency: string) {
   return `${amount.toFixed(2)} ${currency}`
 }
 
-async function openInvoicePdf(invoiceId: string) {
-  const opened = await openUrlAsync(InvoiceService.getInvoicePdfUrl(invoiceId))
+async function downloadInvoicePdf(invoice: InvoiceSummary) {
+  if (downloadingInvoiceId.value) {
+    return
+  }
 
-  if (!opened) {
+  downloadingInvoiceId.value = invoice.id
+
+  try {
+    const downloadedInvoice = await InvoiceService.downloadInvoicePdf(invoice)
+    const shouldOpen = await confirm({
+      title: 'Facture telechargee',
+      message: `Le PDF a ete enregistre dans Documents/factures/${downloadedInvoice.fileName}. Voulez-vous l'ouvrir maintenant ?`,
+      okButtonText: 'Ouvrir',
+      cancelButtonText: 'Plus tard'
+    })
+
+    if (shouldOpen) {
+      const opened = openFile(downloadedInvoice.path, 'Ouvrir la facture PDF')
+
+      if (!opened) {
+        await alert({
+          title: 'Facture telechargee',
+          message: `Le PDF a ete enregistre dans Documents/factures/${downloadedInvoice.fileName}.`,
+          okButtonText: 'OK'
+        })
+      }
+    } else {
+      await alert({
+        title: 'Facture telechargee',
+        message: `Le PDF a ete enregistre dans Documents/factures/${downloadedInvoice.fileName}.`,
+        okButtonText: 'OK'
+      })
+    }
+  } catch (error) {
     await alert({
       title: 'Facture PDF',
-      message: 'Impossible d ouvrir la facture PDF sur cet appareil.',
+      message: error instanceof Error ? error.message : 'Impossible de telecharger la facture PDF.',
       okButtonText: 'OK'
     })
+  } finally {
+    downloadingInvoiceId.value = null
   }
 }
 
@@ -221,6 +261,7 @@ function goBack() {
 .invoice-total-badge { background-color: #ffffff; border-radius: 999; padding: 8 12; vertical-align: center; }
 .invoice-total-badge-label { color: #c2410c; font-size: 11; font-weight: 800; text-align: center; }
 .invoice-cta { background-color: #dc2626; border-radius: 12; padding: 14 16; vertical-align: center; }
+.invoice-cta.disabled { opacity: 0.65; }
 .invoice-cta-text { color: #ffffff; font-size: 14; font-weight: 700; text-align: center; }
 .bottom-nav { background-color: #121826; border-top-width: 1; border-top-color: #1f2733; }
 .nav-item { align-items: center; justify-content: center; padding: 10 4 4 4; }
